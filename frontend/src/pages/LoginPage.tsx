@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState } from "react";
 import {
   Alert,
   Box,
@@ -8,11 +8,11 @@ import {
   Stack,
   TextField,
   Typography,
-} from '@mui/material';
-import { LogIn } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
-import { apiLogin, apiRegister } from '../services/api';
-import logo from '../assets/logo.png';
+} from "@mui/material";
+import { LogIn } from "lucide-react";
+import { useAuth } from "../context/AuthContext";
+import { apiLogin, apiRegister } from "../services/api";
+import logo from "../assets/logo.png";
 
 interface Props {
   onSwitchToRegister: () => void;
@@ -20,8 +20,8 @@ interface Props {
 
 export function LoginPage({ onSwitchToRegister }: Props) {
   const { login } = useAuth();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -34,7 +34,8 @@ export function LoginPage({ onSwitchToRegister }: Props) {
       login(token, user);
     } catch (err: unknown) {
       const msg =
-        axios_detail(err) ?? 'Login failed. Check your credentials and try again.';
+        axios_detail(err) ??
+        "Login failed. Check your credentials and try again.";
       setError(msg);
     } finally {
       setLoading(false);
@@ -66,6 +67,12 @@ export function LoginPage({ onSwitchToRegister }: Props) {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             autoComplete="email"
+            sx={{
+              "& .MuiOutlinedInput-root": {
+                borderRadius: 3,
+                bgcolor: "#f8fafc",
+              },
+            }}
           />
           <TextField
             label="Password"
@@ -75,6 +82,12 @@ export function LoginPage({ onSwitchToRegister }: Props) {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             autoComplete="current-password"
+            sx={{
+              "& .MuiOutlinedInput-root": {
+                borderRadius: 3,
+                bgcolor: "#f8fafc",
+              },
+            }}
           />
 
           <Button
@@ -82,25 +95,39 @@ export function LoginPage({ onSwitchToRegister }: Props) {
             variant="contained"
             fullWidth
             disabled={loading}
-            startIcon={loading ? <CircularProgress size={16} color="inherit" /> : <LogIn size={16} />}
+            startIcon={
+              loading ? (
+                <CircularProgress size={16} color="inherit" />
+              ) : (
+                <LogIn size={16} />
+              )
+            }
             sx={{
               py: 1.4,
               borderRadius: 999,
-              background: 'linear-gradient(135deg,#312e81,#6d28d9)',
-              '&:hover': { opacity: 0.92 },
+              /* background: "linear-gradient(135deg,#312e81,#6d28d9)",
+              "&:hover": { opacity: 0.92 }, */
+              /* background: 'linear-gradient(135deg, #4f46e5, #7c3aed, #db2777)', */
+              background:
+          "radial-gradient(circle at top left, rgba(124,58,237,0.45), transparent 35%), linear-gradient(135deg, #050816 0%, #111827 45%, #312e81 100%)",
+boxShadow: '0 12px 28px rgba(124,58,237,0.45)',
             }}
           >
-            {loading ? 'Signing in…' : 'Sign in'}
+            {loading ? "Signing in…" : "Sign in"}
           </Button>
         </Stack>
       </Box>
 
-      <Typography variant="body2" color="text.secondary" sx={{ mt: 3, textAlign: 'center' }}>
-        No account?{' '}
+      <Typography
+        variant="body2"
+        color="text.secondary"
+        sx={{ mt: 3, textAlign: "center" }}
+      >
+        No account?{" "}
         <Box
           component="span"
           onClick={onSwitchToRegister}
-          sx={{ color: 'primary.main', cursor: 'pointer', fontWeight: 700 }}
+          sx={{ color: "primary.main", cursor: "pointer", fontWeight: 700 }}
         >
           Create one
         </Box>
@@ -120,11 +147,11 @@ interface RegisterProps {
 export function RegisterPage({ onSwitchToLogin }: RegisterProps) {
   const { login } = useAuth();
   const [form, setForm] = useState({
-    fullName: '',
-    email: '',
-    password: '',
-    confirmPassword: '',
-    role: 'event_organiser' as 'event_organiser' | 'system_admin',
+    fullName: "",
+    email: "",
+    password: "",
+    confirmPassword: "",
+    role: "event_organiser" as "event_organiser" | "system_admin",
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -139,7 +166,7 @@ export function RegisterPage({ onSwitchToLogin }: RegisterProps) {
     setError(null);
 
     if (form.password !== form.confirmPassword) {
-      setError('Passwords do not match.');
+      setError("Passwords do not match.");
       return;
     }
 
@@ -153,7 +180,7 @@ export function RegisterPage({ onSwitchToLogin }: RegisterProps) {
       });
       login(token, user);
     } catch (err: unknown) {
-      const msg = axios_detail(err) ?? 'Registration failed. Please try again.';
+      const msg = axios_detail(err) ?? "Registration failed. Please try again.";
       setError(msg);
     } finally {
       setLoading(false);
@@ -182,8 +209,14 @@ export function RegisterPage({ onSwitchToLogin }: RegisterProps) {
             fullWidth
             required
             value={form.fullName}
-            onChange={set('fullName')}
+            onChange={set("fullName")}
             autoComplete="name"
+            sx={{
+              "& .MuiOutlinedInput-root": {
+                borderRadius: 3,
+                bgcolor: "#f8fafc",
+              },
+            }}
           />
           <TextField
             label="Email address"
@@ -191,20 +224,34 @@ export function RegisterPage({ onSwitchToLogin }: RegisterProps) {
             fullWidth
             required
             value={form.email}
-            onChange={set('email')}
+            onChange={set("email")}
             autoComplete="email"
+            sx={{
+              "& .MuiOutlinedInput-root": {
+                borderRadius: 3,
+                bgcolor: "#f8fafc",
+              },
+            }}
           />
 
           {/* Role selector rendered as two toggle cards */}
           <Box>
-            <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary', mb: 1, display: 'block' }}>
+            <Typography
+              variant="caption"
+              sx={{
+                fontWeight: 700,
+                color: "text.secondary",
+                mb: 1,
+                display: "block",
+              }}
+            >
               ACCOUNT TYPE
             </Typography>
             <Stack direction="row" spacing={1.5}>
               {(
                 [
-                  { value: 'event_organiser', label: 'Event Organiser' },
-                  { value: 'system_admin', label: 'System Admin' },
+                  { value: "event_organiser", label: "Event Organiser" },
+                  { value: "system_admin", label: "System Admin" },
                 ] as const
               ).map((opt) => (
                 <Box
@@ -214,19 +261,26 @@ export function RegisterPage({ onSwitchToLogin }: RegisterProps) {
                     flex: 1,
                     p: 1.5,
                     borderRadius: 3,
-                    border: '2px solid',
-                    borderColor: form.role === opt.value ? 'primary.main' : 'grey.300',
-                    bgcolor: form.role === opt.value ? 'rgba(99,102,241,0.06)' : 'grey.50',
-                    cursor: 'pointer',
-                    textAlign: 'center',
-                    transition: '0.2s',
+                    border: "2px solid",
+                    borderColor:
+                      form.role === opt.value ? "primary.main" : "grey.300",
+                    bgcolor:
+                      form.role === opt.value
+                        ? "rgba(99,102,241,0.06)"
+                        : "grey.50",
+                    cursor: "pointer",
+                    textAlign: "center",
+                    transition: "0.2s",
                   }}
                 >
                   <Typography
                     variant="body2"
                     sx={{
                       fontWeight: 700,
-                      color: form.role === opt.value ? 'primary.main' : 'text.secondary',
+                      color:
+                        form.role === opt.value
+                          ? "primary.main"
+                          : "text.secondary",
                     }}
                   >
                     {opt.label}
@@ -242,9 +296,15 @@ export function RegisterPage({ onSwitchToLogin }: RegisterProps) {
             fullWidth
             required
             value={form.password}
-            onChange={set('password')}
+            onChange={set("password")}
             helperText="Min 8 chars, one uppercase, one lowercase, one number"
             autoComplete="new-password"
+            sx={{
+              "& .MuiOutlinedInput-root": {
+                borderRadius: 3,
+                bgcolor: "#f8fafc",
+              },
+            }}
           />
           <TextField
             label="Confirm password"
@@ -252,8 +312,14 @@ export function RegisterPage({ onSwitchToLogin }: RegisterProps) {
             fullWidth
             required
             value={form.confirmPassword}
-            onChange={set('confirmPassword')}
+            onChange={set("confirmPassword")}
             autoComplete="new-password"
+            sx={{
+              "& .MuiOutlinedInput-root": {
+                borderRadius: 3,
+                bgcolor: "#f8fafc",
+              },
+            }}
           />
 
           <Button
@@ -261,25 +327,37 @@ export function RegisterPage({ onSwitchToLogin }: RegisterProps) {
             variant="contained"
             fullWidth
             disabled={loading}
-            startIcon={loading ? <CircularProgress size={16} color="inherit" /> : undefined}
+            startIcon={
+              loading ? (
+                <CircularProgress size={16} color="inherit" />
+              ) : undefined
+            }
             sx={{
               py: 1.4,
               borderRadius: 999,
-              background: 'linear-gradient(135deg,#312e81,#6d28d9)',
-              '&:hover': { opacity: 0.92 },
+              /* background: "linear-gradient(135deg,#312e81,#6d28d9)",
+              "&:hover": { opacity: 0.92 }, */
+              /* background: 'linear-gradient(135deg, #4f46e5, #7c3aed, #db2777)', */
+              background:
+          "radial-gradient(circle at top left, rgba(124,58,237,0.45), transparent 35%), linear-gradient(135deg, #050816 0%, #111827 45%, #312e81 100%)",
+boxShadow: '0 12px 28px rgba(124,58,237,0.45)',
             }}
           >
-            {loading ? 'Creating account…' : 'Create account'}
+            {loading ? "Creating account…" : "Create account"}
           </Button>
         </Stack>
       </Box>
 
-      <Typography variant="body2" color="text.secondary" sx={{ mt: 3, textAlign: 'center' }}>
-        Already have an account?{' '}
+      <Typography
+        variant="body2"
+        color="text.secondary"
+        sx={{ mt: 3, textAlign: "center" }}
+      >
+        Already have an account?{" "}
         <Box
           component="span"
           onClick={onSwitchToLogin}
-          sx={{ color: 'primary.main', cursor: 'pointer', fontWeight: 700 }}
+          sx={{ color: "primary.main", cursor: "pointer", fontWeight: 700 }}
         >
           Sign in
         </Box>
@@ -296,50 +374,135 @@ function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
     <Box
       sx={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: 'linear-gradient(135deg, #111827 0%, #312e81 55%, #7c2d12 100%)',
-        p: 2,
+        minHeight: "100vh",
+        display: "grid",
+        gridTemplateColumns: { xs: "1fr", md: "1.1fr 0.9fr" },
+        background:
+          "radial-gradient(circle at top left, rgba(124,58,237,0.45), transparent 35%), linear-gradient(135deg, #050816 0%, #111827 45%, #312e81 100%)",
+        overflow: "hidden",
       }}
     >
-      <Box sx={{ width: '100%', maxWidth: 440 }}>
-          <Box
+      {/* Left branding section */}
+      <Box
+        sx={{
+          display: { xs: "none", md: "flex" },
+          flexDirection: "column",
+          justifyContent: "center",
+          px: 10,
+          color: "white",
+        }}
+      >
+        <Box
+          component="img"
+          src={logo}
+          alt="EventSense AI"
+          sx={{
+            width: 150,
+            height: 150,
+            borderRadius: 5,
+            mb: 4,
+            boxShadow: "0 25px 60px rgba(0,0,0,0.35)",
+          }}
+        />
+
+        <Typography variant="h2" sx={{ fontWeight: 900, lineHeight: 1 }}>
+          EventSense AI
+        </Typography>
+
+        <Typography
+          variant="h6"
+          sx={{
+            mt: 2,
+            maxWidth: 520,
+            color: "rgba(255,255,255,0.72)",
+            lineHeight: 1.7,
+          }}
+        >
+          Detect suspicious feedback using Negative Selection and understand
+          audience emotion through sentiment analysis.
+        </Typography>
+
+        <Stack
+          direction="row"
+          spacing={1.5}
+          sx={{ mt: 4, flexWrap: "wrap", gap: 1.5 }}
+        >
+          {["Negative Selection", "Sentiment AI", "Feedback Insights"].map(
+            (item) => (
+              <Box
+                key={item}
+                sx={{
+                  px: 2,
+                  py: 1,
+                  borderRadius: 999,
+                  bgcolor: "rgba(255,255,255,0.1)",
+                  border: "1px solid rgba(255,255,255,0.18)",
+                  backdropFilter: "blur(12px)",
+                  fontSize: 14,
+                  fontWeight: 700,
+                }}
+              >
+                {item}
+              </Box>
+            ),
+          )}
+        </Stack>
+      </Box>
+
+      {/* Form section */}
+      <Box
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          p: { xs: 2, sm: 4 },
+        }}
+      >
+        <Box sx={{ width: "100%", maxWidth: 460 }}>
+          <Stack
+            spacing={1}
+            sx={{
+              display: { xs: "flex", md: "none" },
+              alignItems: "center",
+              mb: 3,
+              color: "white",
+            }}
+          >
+            <Box
               component="img"
               src={logo}
               alt="EventSense AI"
-              sx={{ width: 120, height: 120, borderRadius: 2, objectFit: 'cover', flexShrink: 0, alignSelf: 'center' }}
+              sx={{ width: 90, height: 90, borderRadius: 3 }}
             />
-        {/* Branding */}
-        <Stack spacing={0.5} sx={{ mb: 4, textAlign: 'center' }}>
-          
-          <Typography
-            variant="h3"
-            sx={{ fontWeight: 800, color: 'white', lineHeight: 1 }}
-          >
-            EventSense AI
-          </Typography>
-          <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.6)' }}>
-            Hybrid Feedback Analysis System
-          </Typography>
-        </Stack>
+            <Typography variant="h4" sx={{ fontWeight: 900 }}>
+              EventSense AI
+            </Typography>
+            <Typography
+              variant="body2"
+              sx={{ color: "rgba(255,255,255,0.65)" }}
+            >
+              Hybrid Feedback Analysis System
+            </Typography>
+          </Stack>
 
-        <Paper
-          elevation={0}
-          sx={{
-            p: { xs: 3, sm: 4 },
-            borderRadius: 5,
-            bgcolor: 'white',
-          }}
-        >
-          {children}
-        </Paper>
+          <Paper
+            elevation={0}
+            sx={{
+              p: { xs: 3, sm: 4 },
+              borderRadius: 6,
+              bgcolor: "rgba(255,255,255,0.92)",
+              backdropFilter: "blur(20px)",
+              border: "1px solid rgba(255,255,255,0.45)",
+              boxShadow: "0 30px 80px rgba(0,0,0,0.35)",
+            }}
+          >
+            {children}
+          </Paper>
+        </Box>
       </Box>
     </Box>
   );
 }
-
 // ---------------------------------------------------------------------------
 // Helper — extract FastAPI detail message from axios errors
 // ---------------------------------------------------------------------------
@@ -347,14 +510,14 @@ function AuthLayout({ children }: { children: React.ReactNode }) {
 function axios_detail(err: unknown): string | null {
   if (
     err &&
-    typeof err === 'object' &&
-    'response' in err &&
+    typeof err === "object" &&
+    "response" in err &&
     err.response &&
-    typeof err.response === 'object' &&
-    'data' in err.response
+    typeof err.response === "object" &&
+    "data" in err.response
   ) {
     const data = (err.response as { data: unknown }).data;
-    if (data && typeof data === 'object' && 'detail' in data) {
+    if (data && typeof data === "object" && "detail" in data) {
       return String((data as { detail: unknown }).detail);
     }
   }
