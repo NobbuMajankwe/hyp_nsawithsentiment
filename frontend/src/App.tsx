@@ -2,20 +2,19 @@ import { useState } from 'react';
 import { Alert, Box, Chip, Container, Paper, Snackbar, Stack, Typography } from '@mui/material';
 
 import { Header } from './components/Header';
-import { WorkflowRail } from './components/WorkflowRail';
 import { InputPanel } from './components/InputPanel';
 import { FeedbackCanvas } from './components/FeedbackCanvas';
 import { FindingsPanel } from './components/FindingsPanel';
 import { LoginPage, RegisterPage } from './pages/LoginPage';
 import { SentimentPage } from './pages/SentimentPage';
 import { InsightStoryPage } from './pages/InsightStoryPage';
+import { PipelineTracker } from './components/PipelineTracker';
 
 import { SAMPLE_TEXT } from './data/mockFeedback';
+import { buildSteps } from './data/pipelineSteps';
 import { runNsaAnalysis, type AnalyseResponse } from './services/api';
 import { useAuth } from './context/AuthContext';
 import type { AnalysisResult } from './types';
-import { PipelineTracker } from './components/PipelineTracker';
-import { buildSteps } from './data/pipelineSteps';
 
 // Exported so Header can import it without a circular dependency
 export type Page = 'nsa' | 'sentiment' | 'insight';
@@ -138,18 +137,16 @@ function NsaPage() {
           steps={buildSteps(1)}
           activeColor="#6366f1"
         />}
-        {/* ── Three-column layout ── */}
+        {/* ── Two-column layout ── */}
         <Box
           component="main"
           sx={{
             display: 'grid',
-            gridTemplateColumns: { xs: '1fr', lg: '240px minmax(0,1fr) 340px' },
+            gridTemplateColumns: { xs: '1fr', lg: 'minmax(0,1fr) 340px' },
             gap: 3,
             alignItems: 'start',
           }}
         >
-          <WorkflowRail />
-
           <Stack spacing={3}>
             <InputPanel
               value={datasetText}
