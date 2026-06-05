@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { Alert, Box, Chip, Container, Paper, Snackbar, Stack, Typography } from '@mui/material';
 
-import { Header } from './components/Header';
-import { SideNav } from './components/SideNav';
+import { Header, SIDENAV_WIDTH, SIDENAV_COLLAPSED_WIDTH, HEADER_HEIGHT } from './components/Header';
 import { InputPanel } from './components/InputPanel';
 import { FeedbackCanvas } from './components/FeedbackCanvas';
 import { FindingsPanel } from './components/FindingsPanel';
@@ -44,38 +43,32 @@ export default function App() {
 // ---------------------------------------------------------------------------
 
 function Dashboard() {
-  const [page, setPage] = useState<Page>('nsa');
+  const [page, setPage]         = useState<Page>('nsa');
+  const [expanded, setExpanded] = useState(true);
+  const sideWidth = expanded ? SIDENAV_WIDTH : SIDENAV_COLLAPSED_WIDTH;
 
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: '#f6f3ee', display: 'flex', flexDirection: 'column' }}>
-      {/* Top navbar */}
-      <Header currentPage={page} onNavigate={setPage} />
+    <Box sx={{ minHeight: '100vh', bgcolor: '#f6f3ee' }}>
+      {/* Fixed header + attached sidenav */}
+      <Header
+        currentPage={page}
+        onNavigate={setPage}
+        expanded={expanded}
+        onToggle={() => setExpanded((e) => !e)}
+      />
 
-      {/* Body: sidenav + page content */}
-      <Box sx={{ display: 'flex', flex: 1, gap: 0 }}>
-
-        {/* Persistent sidenav */}
-        <Box
-          sx={{
-            display: { xs: 'none', lg: 'flex' },
-            flexDirection: 'column',
-            p: 3,
-            pr: 0,
-            position: 'sticky',
-            top: 64,          // height of AppBar
-            alignSelf: 'flex-start',
-            height: 'calc(100vh - 64px)',
-          }}
-        >
-          <SideNav currentPage={page} onNavigate={setPage} />
-        </Box>
-
-        {/* Page content */}
-        <Box sx={{ flex: 1, minWidth: 0 }}>
-          {page === 'nsa'       && <NsaPage />}
-          {page === 'sentiment' && <SentimentPage />}
-          {page === 'insight'   && <InsightStoryPage />}
-        </Box>
+      {/* Content — pushed right by sidenav width and down by header height */}
+      <Box
+        sx={{
+          ml: { xs: 0, lg: `${sideWidth}px` },
+          mt: `${HEADER_HEIGHT}px`,
+          transition: 'margin-left 0.25s ease',
+          minHeight: `calc(100vh - ${HEADER_HEIGHT}px)`,
+        }}
+      >
+        {page === 'nsa'       && <NsaPage />}
+        {page === 'sentiment' && <SentimentPage />}
+        {page === 'insight'   && <InsightStoryPage />}
       </Box>
     </Box>
   );
