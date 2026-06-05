@@ -79,7 +79,7 @@ export function WorkflowRail() {
                 
               }}
             >
-              {index < steps.length - 1 && (
+              {/* {index < steps.length - 1 && (
                 <Box
                   sx={{
                     position: 'absolute',
@@ -91,7 +91,7 @@ export function WorkflowRail() {
                     backgroundColor: 'pink',
                   }}
                 />
-              )}
+              )} */}
 
               <Paper
                 elevation={0}

@@ -1,20 +1,27 @@
 import { useState } from 'react';
-import { Alert, Box, Button, Chip, Container, Paper, Snackbar, Stack, Typography } from '@mui/material';
-import { LogOut, UserCircle } from 'lucide-react';
+import { Alert, Box, Chip, Container, Paper, Snackbar, Stack, Typography } from '@mui/material';
 
+import { Header } from './components/Header';
 import { WorkflowRail } from './components/WorkflowRail';
 import { InputPanel } from './components/InputPanel';
 import { FeedbackCanvas } from './components/FeedbackCanvas';
 import { FindingsPanel } from './components/FindingsPanel';
 import { LoginPage, RegisterPage } from './pages/LoginPage';
+import { SentimentPage } from './pages/SentimentPage';
+import { InsightStoryPage } from './pages/InsightStoryPage';
 
 import { SAMPLE_TEXT } from './data/mockFeedback';
 import { runNsaAnalysis, type AnalyseResponse } from './services/api';
 import { useAuth } from './context/AuthContext';
 import type { AnalysisResult } from './types';
+import { PipelineTracker } from './components/PipelineTracker';
+import { buildSteps } from './data/pipelineSteps';
+
+// Exported so Header can import it without a circular dependency
+export type Page = 'nsa' | 'sentiment' | 'insight';
 
 // ---------------------------------------------------------------------------
-// Root — handles auth gate
+// Root — auth gate
 // ---------------------------------------------------------------------------
 
 export default function App() {
@@ -33,11 +40,29 @@ export default function App() {
 }
 
 // ---------------------------------------------------------------------------
-// Dashboard — shown once authenticated
+// Dashboard — page shell + router
 // ---------------------------------------------------------------------------
 
 function Dashboard() {
-  const { user, token, logout } = useAuth();
+  const [page, setPage] = useState<Page>('nsa');
+
+  return (
+    <Box sx={{ minHeight: '100vh', bgcolor: '#f6f3ee' }}>
+      <Header currentPage={page} onNavigate={setPage} />
+
+      {page === 'nsa' && <NsaPage />}
+      {page === 'sentiment' && <SentimentPage />}
+      {page === 'insight' && <InsightStoryPage />}
+    </Box>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// NSA page (the main analysis view)
+// ---------------------------------------------------------------------------
+
+function NsaPage() {
+  const { token } = useAuth();
   const [datasetText, setDatasetText] = useState(SAMPLE_TEXT);
   const [results, setResults] = useState<AnalysisResult[]>([]);
   const [summary, setSummary] = useState<AnalyseResponse | null>(null);
@@ -47,20 +72,18 @@ function Dashboard() {
   async function handleRun() {
     const lines = datasetText.split('\n').filter((l) => l.trim());
     if (lines.length === 0 || !token) return;
-
     setLoading(true);
     setError(null);
-
     try {
       const data = await runNsaAnalysis(lines, token);
       setResults(data.results);
       setSummary(data);
     } catch (err: unknown) {
-      const msg =
+      setError(
         err instanceof Error
           ? err.message
-          : 'Could not reach the backend. Is uvicorn running on port 8000?';
-      setError(msg);
+          : 'Could not reach the backend. Is uvicorn running on port 8000?',
+      );
     } finally {
       setLoading(false);
     }
@@ -73,14 +96,11 @@ function Dashboard() {
     setError(null);
   }
 
-  const roleLabel =
-    user?.role === 'system_admin' ? 'System Admin' : 'Event Organiser';
-
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: '#f6f3ee', py: 4 }}>
+    <Box sx={{ py: 4 }}>
       <Container maxWidth={false} sx={{ maxWidth: 1600 }}>
 
-        {/* ── Hero header ── */}
+        {/* ── Hero banner ── */}
         <Paper
           elevation={0}
           sx={{
@@ -92,96 +112,38 @@ function Dashboard() {
             overflow: 'hidden',
           }}
         >
-          <Stack
-            direction={{ xs: 'column', md: 'row' }}
-            spacing={4}
-            sx={{ alignItems: { xs: 'flex-start', md: 'center' }, justifyContent: 'space-between' }}
+          <Chip
+            label="Deliverable 04 — Preliminary Prototype"
+            size="small"
+            sx={{ mb: 2, bgcolor: 'rgba(255,255,255,0.14)', color: 'white', letterSpacing: 1, textTransform: 'uppercase' }}
+          />
+          <Typography
+            variant="h2"
+            sx={{ fontWeight: 800, fontSize: { xs: '2.2rem', md: '3.5rem' }, lineHeight: 1, mb: 2 }}
           >
-            <Box>
-              <Chip
-                label="Deliverable 04 — Preliminary Prototype"
-                size="small"
-                sx={{
-                  mb: 2,
-                  bgcolor: 'rgba(255,255,255,0.14)',
-                  color: 'white',
-                  letterSpacing: 1,
-                  textTransform: 'uppercase',
-                }}
-              />
-              <Typography
-                variant="h2"
-                sx={{ fontWeight: 800, fontSize: { xs: '2.3rem', md: '4rem' }, lineHeight: 1, mb: 2 }}
-              >
-                SignalCheck AI
-              </Typography>
-              <Typography variant="h6" sx={{ maxWidth: 720, color: 'rgba(255,255,255,0.82)', fontWeight: 400 }}>
-                Negative Selection Algorithm filter for feedback analysis. Suspicious records are
-                blocked before sentiment classification in the next phase.
-              </Typography>
-            </Box>
-
-            {/* User card + logout */}
-            <Paper
-              elevation={0}
-              sx={{
-                p: 3,
-                width: { xs: '100%', md: 340 },
-                borderRadius: 4,
-                bgcolor: 'rgba(255,255,255,0.12)',
-                border: '1px solid rgba(255,255,255,0.22)',
-                backdropFilter: 'blur(14px)',
-                color: 'white',
-              }}
-            >
-              <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center', mb: 2 }}>
-                <UserCircle size={28} />
-                <Box sx={{ flex: 1, minWidth: 0 }}>
-                  <Typography sx={{ fontWeight: 700, fontSize: '0.95rem' }} noWrap>
-                    {user?.fullName}
-                  </Typography>
-                  <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.65)' }} noWrap>
-                    {user?.email}
-                  </Typography>
-                </Box>
-              </Stack>
-
-              <Chip
-                label={roleLabel}
-                size="small"
-                sx={{
-                  mb: 2,
-                  bgcolor: 'rgba(255,255,255,0.18)',
-                  color: 'white',
-                  fontWeight: 700,
-                }}
-              />
-
-              <Button
-                variant="outlined"
-                fullWidth
-                onClick={logout}
-                startIcon={<LogOut size={15} />}
-                sx={{
-                  color: 'white',
-                  borderColor: 'rgba(255,255,255,0.4)',
-                  borderRadius: 999,
-                  '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.08)' },
-                }}
-              >
-                Sign out
-              </Button>
-            </Paper>
-          </Stack>
+            NSA Feedback Filter
+          </Typography>
+          <Typography variant="h6" sx={{ maxWidth: 680, color: 'rgba(255,255,255,0.78)', fontWeight: 400 }}>
+            Negative Selection Algorithm pre-processes feedback records, blocking suspicious
+            entries before they reach sentiment analysis in the next phase.
+          </Typography>
         </Paper>
-
-        {/* ── Main grid ── */}
+{/* ── Pipeline context ── */}
+        {results.length === 0?<PipelineTracker
+          subtitle="Step 1 of 4 — Load Dataset"
+          steps={buildSteps(0)}
+          activeColor="#6366f1"
+        />:<PipelineTracker
+          subtitle="Step 2 of 4 — Negative Selection Filter"
+          steps={buildSteps(1)}
+          activeColor="#6366f1"
+        />}
+        {/* ── Three-column layout ── */}
         <Box
           component="main"
           sx={{
             display: 'grid',
             gridTemplateColumns: { xs: '1fr', lg: '240px minmax(0,1fr) 340px' },
-            
             gap: 3,
             alignItems: 'start',
           }}
