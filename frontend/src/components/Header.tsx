@@ -14,7 +14,8 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
-import { Activity, LogOut, ShieldCheck, User } from 'lucide-react';
+import { LogOut, ShieldCheck, User } from 'lucide-react';
+import logo from '../assets/logo.png';
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import type { Page } from '../App';
@@ -60,21 +61,18 @@ export function Header({ currentPage, onNavigate }: Props) {
             sx={{ display: 'flex', alignItems: 'center', gap: 1.25, mr: 4, cursor: 'pointer' }}
           >
             <Box
-              sx={{
-                width: 32, height: 32, borderRadius: 2,
-                background: 'linear-gradient(135deg,#6366f1,#8b5cf6)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-              }}
-            >
-              <Activity size={17} color="white" />
-            </Box>
+              component="img"
+              src={logo}
+              alt="EventSense AI"
+              sx={{ width: 32, height: 32, borderRadius: 2, objectFit: 'cover', flexShrink: 0 }}
+            />
             <Typography sx={{ fontWeight: 800, fontSize: '1.1rem', color: 'white', letterSpacing: '-0.3px' }}>
-              SignalCheck AI
+              EventSense AI
             </Typography>
           </Box>
 
-          {/* ── Nav links ── */}
-          <Box sx={{ display: { xs: 'none', md: 'flex' }, gap: 0.5 }}>
+          {/* ── Nav links — visible on md, hidden on lg+ (sidenav takes over) ── */}
+          <Box sx={{ display: { xs: 'none', md: 'flex', lg: 'none' }, gap: 0.5 }}>
             <NavLink active={currentPage === 'nsa'} onClick={() => onNavigate('nsa')}>
               NSA Analysis
             </NavLink>
@@ -105,7 +103,7 @@ export function Header({ currentPage, onNavigate }: Props) {
             }}
           />
 
-          {/* ── Avatar ── */}
+          {/* ── Avatar / user menu ── */}
           <Tooltip title="Account">
             <IconButton onClick={(e) => setMenuAnchor(e.currentTarget)} sx={{ p: 0.5 }}>
               <Avatar
@@ -171,19 +169,7 @@ export function Header({ currentPage, onNavigate }: Props) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Nav link button
-// ---------------------------------------------------------------------------
-
-function NavLink({
-  children,
-  active = false,
-  onClick,
-}: {
-  children: React.ReactNode;
-  active?: boolean;
-  onClick?: () => void;
-}) {
+function NavLink({ children, active = false, onClick }: { children: React.ReactNode; active?: boolean; onClick?: () => void }) {
   return (
     <Button
       size="small"

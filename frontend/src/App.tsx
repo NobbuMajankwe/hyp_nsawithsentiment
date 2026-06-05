@@ -2,9 +2,11 @@ import { useState } from 'react';
 import { Alert, Box, Chip, Container, Paper, Snackbar, Stack, Typography } from '@mui/material';
 
 import { Header } from './components/Header';
+import { SideNav } from './components/SideNav';
 import { InputPanel } from './components/InputPanel';
 import { FeedbackCanvas } from './components/FeedbackCanvas';
 import { FindingsPanel } from './components/FindingsPanel';
+import { AnalyticsCharts } from './components/AnalyticsCharts';
 import { LoginPage, RegisterPage } from './pages/LoginPage';
 import { SentimentPage } from './pages/SentimentPage';
 import { InsightStoryPage } from './pages/InsightStoryPage';
@@ -16,7 +18,6 @@ import { runNsaAnalysis, type AnalyseResponse } from './services/api';
 import { useAuth } from './context/AuthContext';
 import type { AnalysisResult } from './types';
 
-// Exported so Header can import it without a circular dependency
 export type Page = 'nsa' | 'sentiment' | 'insight';
 
 // ---------------------------------------------------------------------------
@@ -39,34 +40,58 @@ export default function App() {
 }
 
 // ---------------------------------------------------------------------------
-// Dashboard — page shell + router
+// Dashboard — persistent shell with sidenav
 // ---------------------------------------------------------------------------
 
 function Dashboard() {
   const [page, setPage] = useState<Page>('nsa');
 
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: '#f6f3ee' }}>
+    <Box sx={{ minHeight: '100vh', bgcolor: '#f6f3ee', display: 'flex', flexDirection: 'column' }}>
+      {/* Top navbar */}
       <Header currentPage={page} onNavigate={setPage} />
 
-      {page === 'nsa' && <NsaPage />}
-      {page === 'sentiment' && <SentimentPage />}
-      {page === 'insight' && <InsightStoryPage />}
+      {/* Body: sidenav + page content */}
+      <Box sx={{ display: 'flex', flex: 1, gap: 0 }}>
+
+        {/* Persistent sidenav */}
+        <Box
+          sx={{
+            display: { xs: 'none', lg: 'flex' },
+            flexDirection: 'column',
+            p: 3,
+            pr: 0,
+            position: 'sticky',
+            top: 64,          // height of AppBar
+            alignSelf: 'flex-start',
+            height: 'calc(100vh - 64px)',
+          }}
+        >
+          <SideNav currentPage={page} onNavigate={setPage} />
+        </Box>
+
+        {/* Page content */}
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          {page === 'nsa'       && <NsaPage />}
+          {page === 'sentiment' && <SentimentPage />}
+          {page === 'insight'   && <InsightStoryPage />}
+        </Box>
+      </Box>
     </Box>
   );
 }
 
 // ---------------------------------------------------------------------------
-// NSA page (the main analysis view)
+// NSA page
 // ---------------------------------------------------------------------------
 
 function NsaPage() {
   const { token } = useAuth();
   const [datasetText, setDatasetText] = useState(SAMPLE_TEXT);
-  const [results, setResults] = useState<AnalysisResult[]>([]);
-  const [summary, setSummary] = useState<AnalyseResponse | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [results, setResults]         = useState<AnalysisResult[]>([]);
+  const [summary, setSummary]         = useState<AnalyseResponse | null>(null);
+  const [loading, setLoading]         = useState(false);
+  const [error, setError]             = useState<string | null>(null);
 
   async function handleRun() {
     const lines = datasetText.split('\n').filter((l) => l.trim());
@@ -97,7 +122,7 @@ function NsaPage() {
 
   return (
     <Box sx={{ py: 4 }}>
-      <Container maxWidth={false} sx={{ maxWidth: 1600 }}>
+      <Container maxWidth={false} sx={{ maxWidth: 1400 }}>
 
         {/* ── Hero banner ── */}
         <Paper
@@ -127,26 +152,25 @@ function NsaPage() {
             entries before they reach sentiment analysis in the next phase.
           </Typography>
         </Paper>
-{/* ── Pipeline context ── */}
-        {results.length === 0?<PipelineTracker
-          subtitle="Step 1 of 4 — Load Dataset"
-          steps={buildSteps(0)}
+
+        {/* ── Pipeline tracker ── */}
+        <PipelineTracker
+          subtitle={results.length === 0 ? 'Step 1 of 4 — Load Dataset' : 'Step 2 of 4 — Negative Selection Filter'}
+          steps={buildSteps(results.length === 0 ? 0 : 1)}
           activeColor="#6366f1"
-        />:<PipelineTracker
-          subtitle="Step 2 of 4 — Negative Selection Filter"
-          steps={buildSteps(1)}
-          activeColor="#6366f1"
-        />}
-        {/* ── Two-column layout ── */}
+        />
+
+        {/* ── Main two-column grid ── */}
         <Box
           component="main"
           sx={{
             display: 'grid',
-            gridTemplateColumns: { xs: '1fr', lg: 'minmax(0,1fr) 340px' },
+            gridTemplateColumns: { xs: '1fr', xl: 'minmax(0,1fr) 340px' },
             gap: 3,
             alignItems: 'start',
           }}
         >
+          {/* Left: input + record cards + charts */}
           <Stack spacing={3}>
             <InputPanel
               value={datasetText}
@@ -156,8 +180,10 @@ function NsaPage() {
               loading={loading}
             />
             <FeedbackCanvas results={results} />
+            <AnalyticsCharts results={results} />
           </Stack>
 
+          {/* Right: findings summary */}
           <FindingsPanel summary={summary} results={results} />
         </Box>
       </Container>

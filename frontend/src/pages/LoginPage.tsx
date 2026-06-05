@@ -12,6 +12,7 @@ import {
 import { LogIn } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { apiLogin, apiRegister } from '../services/api';
+import logo from '../assets/logo.png';
 
 interface Props {
   onSwitchToRegister: () => void;
@@ -46,7 +47,7 @@ export function LoginPage({ onSwitchToRegister }: Props) {
         Welcome back
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        Sign in to your SignalCheck AI account
+        Sign in to your EventSense AI account
       </Typography>
 
       {error && (
@@ -304,13 +305,20 @@ function AuthLayout({ children }: { children: React.ReactNode }) {
       }}
     >
       <Box sx={{ width: '100%', maxWidth: 440 }}>
+          <Box
+              component="img"
+              src={logo}
+              alt="EventSense AI"
+              sx={{ width: 120, height: 120, borderRadius: 2, objectFit: 'cover', flexShrink: 0, alignSelf: 'center' }}
+            />
         {/* Branding */}
         <Stack spacing={0.5} sx={{ mb: 4, textAlign: 'center' }}>
+          
           <Typography
             variant="h3"
             sx={{ fontWeight: 800, color: 'white', lineHeight: 1 }}
           >
-            SignalCheck AI
+            EventSense AI
           </Typography>
           <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.6)' }}>
             Hybrid Feedback Analysis System

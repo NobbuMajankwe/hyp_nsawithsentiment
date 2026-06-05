@@ -1,5 +1,5 @@
 """
-main.py — FastAPI entry point for SignalCheck AI backend
+main.py — FastAPI entry point for EventSense AI backend
 =========================================================
 Endpoints:
   POST /api/auth/register  — create a new account
@@ -31,7 +31,7 @@ from auth import (
 # ---------------------------------------------------------------------------
 
 app = FastAPI(
-    title="SignalCheck AI",
+    title="EventSense AI",
     description="NSA anomaly detection with JWT authentication.",
     version="0.2.0",
 )
@@ -147,7 +147,7 @@ def _nsa_result_to_item(r: NSAResult) -> ResultItem:
 
 @app.get("/")
 def health_check():
-    return {"status": "ok", "service": "SignalCheck AI"}
+    return {"status": "ok", "service": "EventSense AI"}
 
 
 # ---------------------------------------------------------------------------
