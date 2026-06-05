@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-labelledby="title desc">
+  <title id="title">EventSense AI logo</title>
+  <desc id="desc">Vector logo for EventSense AI, combining a security shield, artificial immune system nodes, and sentiment analysis speech bubble.</desc>
+  <defs>
+    <linearGradient id="blueGreen" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#061947"/>
+      <stop offset="45%" stop-color="#1478d4"/>
+      <stop offset="100%" stop-color="#56c83f"/>
+    </linearGradient>
+    <linearGradient id="aiGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#1377d4"/>
+      <stop offset="55%" stop-color="#13a8c9"/>
+      <stop offset="100%" stop-color="#65c83e"/>
+    </linearGradient>
+    <linearGradient id="shieldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#061947"/>
+      <stop offset="60%" stop-color="#1478d4"/>
+      <stop offset="100%" stop-color="#18a8d7"/>
+    </linearGradient>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#0b1a3a" flood-opacity="0.12"/>
+    </filter>
+    <style>
+      .navy{fill:#061947}.muted{fill:#617083}.line{fill:none;stroke-linecap:round;stroke-linejoin:round}.nodeLine{stroke:#1869b7;stroke-width:5}.detector{stroke:#061947;stroke-width:7}.bar{stroke-linecap:round;stroke-width:12}.word{font-family:Montserrat, Poppins, Arial, sans-serif;font-weight:800;letter-spacing:-2px}.tag{font-family:Montserrat, Poppins, Arial, sans-serif;font-weight:400;letter-spacing:.5px}
+    </style>
+  </defs>
+
+  <rect width="1024" height="1024" fill="#ffffff"/>
+
+  <!-- outer circular motion mark -->
+  <path d="M354 214 C465 120 651 126 760 244" class="line" stroke="url(#blueGreen)" stroke-width="14"/>
+  <path d="M355 619 C476 719 670 703 778 581" class="line" stroke="url(#blueGreen)" stroke-width="14"/>
+
+  <!-- icon group -->
+  <g filter="url(#softShadow)">
+    <!-- speech bubble -->
+    <path d="M620 291 C692 248 802 270 856 344 C922 435 874 562 752 579 L682 649 L691 568 C630 548 594 496 595 433 C596 374 607 321 620 291Z" fill="#fff" stroke="url(#blueGreen)" stroke-width="13" stroke-linejoin="round"/>
+
+    <!-- shield -->
+    <path d="M428 229 L531 284 L531 426 C531 506 487 571 428 612 C369 571 325 506 325 426 L325 284 Z" fill="#ffffff" stroke="url(#shieldGrad)" stroke-width="18" stroke-linejoin="round"/>
+    <path d="M428 229 L428 612" class="line" stroke="#071947" stroke-width="10" opacity=".9"/>
+
+    <!-- AIS molecule inside shield -->
+    <circle cx="428" cy="416" r="43" fill="url(#shieldGrad)"/>
+    <circle cx="443" cy="400" r="9" fill="#ffffff" opacity=".9"/>
+    <circle cx="409" cy="437" r="5" fill="#ffffff" opacity=".75"/>
+    <g class="line nodeLine">
+      <path d="M428 416 L428 344"/><path d="M428 416 L371 378"/><path d="M428 416 L486 378"/><path d="M428 416 L357 438"/><path d="M428 416 L501 438"/><path d="M428 416 L386 489"/><path d="M428 416 L472 489"/>
+    </g>
+    <g fill="#126fc5">
+      <circle cx="428" cy="344" r="11"/><circle cx="371" cy="378" r="11"/><circle cx="486" cy="378" r="11"/><circle cx="357" cy="438" r="11"/><circle cx="501" cy="438" r="11"/><circle cx="386" cy="489" r="11"/><circle cx="472" cy="489" r="11"/>
+      <circle cx="399" cy="388" r="8"/><circle cx="457" cy="388" r="8"/><circle cx="399" cy="454" r="8"/><circle cx="457" cy="454" r="8"/>
+    </g>
+
+    <!-- negative selection detector shapes -->
+    <g class="line detector" opacity=".95">
+      <path d="M256 262 l22 18 l-17 30"/><path d="M230 342 l26 22 l-20 33"/><path d="M250 444 l27 16 l-15 36"/><path d="M286 525 l27 12 l-10 34"/>
+      <path d="M297 384 C319 384 321 422 345 423"/><path d="M292 465 C315 461 323 493 345 489"/>
+    </g>
+    <g fill="#555f68">
+      <circle cx="314" cy="244" r="10"/><circle cx="315" cy="331" r="9"/><circle cx="316" cy="428" r="10"/><circle cx="328" cy="500" r="9"/>
+    </g>
+
+    <!-- sentiment marks -->
+    <g>
+      <circle cx="696" cy="349" r="31" fill="#55c43a"/>
+      <circle cx="685" cy="340" r="5" fill="#fff"/><circle cx="708" cy="340" r="5" fill="#fff"/>
+      <path d="M681 358 Q696 372 712 358" class="line" stroke="#fff" stroke-width="5"/>
+      <path d="M744 343 H846" class="bar" stroke="#55c43a"/><path d="M744 373 H814" class="bar" stroke="#55c43a"/>
+
+      <circle cx="696" cy="458" r="31" fill="#f9bd2e"/>
+      <circle cx="685" cy="449" r="5" fill="#fff"/><circle cx="708" cy="449" r="5" fill="#fff"/>
+      <path d="M681 466 H711" class="line" stroke="#fff" stroke-width="5"/>
+      <path d="M744 452 H844" class="bar" stroke="#f9bd2e"/><path d="M744 482 H804" class="bar" stroke="#f9bd2e"/>
+
+      <circle cx="696" cy="562" r="31" fill="#ee2f25"/>
+      <circle cx="685" cy="553" r="5" fill="#fff"/><circle cx="708" cy="553" r="5" fill="#fff"/>
+      <path d="M681 574 Q696 559 712 574" class="line" stroke="#fff" stroke-width="5"/>
+      <path d="M744 555 H817" class="bar" stroke="#ee2f25"/><path d="M744 585 H785" class="bar" stroke="#ee2f25"/>
+    </g>
+  </g>
+
+  <!-- wordmark -->
+  <text x="84" y="801" class="word" font-size="100" fill="#071947">EventSense</text>
+  <text x="810" y="801" class="word" font-size="100" fill="url(#aiGrad)">AI</text>
+
+  <!-- tagline and decorative lines -->
+  <path d="M112 858 H196" class="line" stroke="#0f77ca" stroke-width="5"/>
+  <text x="220" y="875" class="tag" font-size="39" fill="#33445a">Negative Selection Algorithm</text>
+  <path d="M831 858 H919" class="line" stroke="#25a764" stroke-width="5"/>
+  <text x="304" y="930" class="tag" font-size="40" fill="#777777">and Sentiment analysis app</text>
+</svg>
