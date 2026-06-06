@@ -1,7 +1,7 @@
-import { Box, Chip, Paper, Stack, Typography } from '@mui/material';
-import { AlertTriangle, CheckCircle2, BarChart2 } from 'lucide-react';
-import type { AnalysisResult } from '../types';
-import type { AnalyseResponse } from '../services/api';
+import { Box, Chip, Paper, Stack, Typography } from "@mui/material";
+import { AlertTriangle, CheckCircle2, BarChart2, Terminal } from "lucide-react";
+import type { AnalysisResult } from "../types";
+import type { AnalyseResponse } from "../services/api";
 
 interface Props {
   summary: AnalyseResponse | null;
@@ -10,11 +10,12 @@ interface Props {
 
 export function FindingsPanel({ summary, results }: Props) {
   const total = summary?.totalRecords ?? results.length;
-  const suspicious = summary?.suspiciousRecords ?? results.filter((r) => r.nsaStatus === 'Suspicious').length;
+  const suspicious =
+    summary?.suspiciousRecords ??
+    results.filter((r) => r.nsaStatus === "Suspicious").length;
   const valid = summary?.validRecords ?? total - suspicious;
 
-  // Pick the first suspicious record to surface its reason as the main pattern
-  const topAnomaly = results.find((r) => r.nsaStatus === 'Suspicious');
+  const topAnomaly = results.find((r) => r.nsaStatus === "Suspicious");
 
   return (
     <Paper
@@ -22,30 +23,35 @@ export function FindingsPanel({ summary, results }: Props) {
       elevation={0}
       sx={{
         p: 3,
-        borderRadius: 5,
-        bgcolor: 'white',
-        border: '1px solid',
-        borderColor: 'grey.200',
-        position: { lg: 'sticky' },
+        borderRadius: 4,
+        bgcolor: "#050816",
+        color: "#e5e7eb",
+        border: "1px solid rgba(34,211,238,0.25)",
+        boxShadow: "0 0 40px rgba(34,211,238,0.08)",
+        position: { lg: "sticky" },
         top: 24,
-        height: 'fit-content',
+        height: "fit-content",
+        fontFamily: "monospace",
       }}
     >
-      <Stack spacing={0.5} sx={{ mb: 3 }}>
-        <Typography
-          variant="caption"
-          sx={{
-            color: 'primary.main',
-            textTransform: 'uppercase',
-            letterSpacing: 1,
-            fontWeight: 700,
-          }}
-        >
-          NSA Findings
-        </Typography>
+      <Stack spacing={1} sx={{ mb: 3 }}>
+        <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+          <Terminal size={16} color="#22d3ee" />
+          <Typography
+            variant="caption"
+            sx={{
+              color: "#22d3ee",
+              textTransform: "uppercase",
+              letterSpacing: 1,
+              fontWeight: 800,
+            }}
+          >
+            ~/eventsense-ai/findings
+          </Typography>
+        </Stack>
 
-        <Typography variant="h5" sx={{ fontWeight: 800 }}>
-          Signal summary
+        <Typography variant="h5" sx={{ fontWeight: 900, color: "#f8fafc" }}>
+          &gt; signal_summary<span style={{ color: "#22d3ee" }}>()</span>
         </Typography>
       </Stack>
 
@@ -54,33 +60,42 @@ export function FindingsPanel({ summary, results }: Props) {
         sx={{
           p: 3,
           mb: 3,
-          borderRadius: 4,
-          bgcolor: suspicious > 0 ? 'rgba(239,68,68,0.08)' : 'rgba(34,197,94,0.08)',
-          border: '1px solid',
-          borderColor: suspicious > 0 ? 'error.light' : 'success.light',
-          display: 'flex',
-          alignItems: 'center',
+          borderRadius: 3,
+          bgcolor:
+            suspicious > 0 ? "rgba(127,29,29,0.35)" : "rgba(6,78,59,0.28)",
+          border: "1px solid",
+          borderColor:
+            suspicious > 0 ? "rgba(248,113,113,0.45)" : "rgba(34,211,238,0.35)",
+          display: "flex",
+          alignItems: "center",
           gap: 2,
+          boxShadow:
+            suspicious > 0
+              ? "0 0 24px rgba(239,68,68,0.12)"
+              : "0 0 24px rgba(34,211,238,0.12)",
         }}
       >
         {suspicious > 0 ? (
-          <AlertTriangle size={28} color="#ef4444" />
+          <AlertTriangle size={28} color="#f87171" />
         ) : (
-          <CheckCircle2 size={28} color="#22c55e" />
+          <CheckCircle2 size={28} color="#22d3ee" />
         )}
+
         <Box>
           <Typography
             sx={{
-              fontSize: '2.4rem',
+              fontSize: "2.4rem",
               fontWeight: 900,
               lineHeight: 1,
-              color: suspicious > 0 ? 'error.main' : 'success.main',
+              color: suspicious > 0 ? "#f87171" : "#22d3ee",
+              fontFamily: "monospace",
             }}
           >
             {suspicious}
           </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-            suspicious record{suspicious !== 1 ? 's' : ''} detected
+
+          <Typography variant="body2" sx={{ mt: 0.5, color: "#94a3b8" }}>
+            suspicious_record{suspicious !== 1 ? "s" : ""}_detected
           </Typography>
         </Box>
       </Box>
@@ -88,32 +103,40 @@ export function FindingsPanel({ summary, results }: Props) {
       {/* Stat grid */}
       <Box
         sx={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(2, 1fr)',
+          display: "grid",
+          gridTemplateColumns: "repeat(2, 1fr)",
           gap: 1.5,
           mb: 3,
         }}
       >
-        <MiniStat label="Total records" value={total} color="#6366f1" />
-        <MiniStat label="Valid" value={valid} color="#22c55e" />
-        <MiniStat label="Suspicious" value={suspicious} color="#ef4444" />
-        <MiniStat label="Pass rate" value={total > 0 ? `${Math.round((valid / total) * 100)}%` : '—'} color="#8b5cf6" />
+        <MiniStat label="total_records" value={total} color="#67e8f9" />
+        <MiniStat label="valid" value={valid} color="#22c55e" />
+        <MiniStat label="suspicious" value={suspicious} color="#f87171" />
+        <MiniStat
+          label="pass_rate"
+          value={total > 0 ? `${Math.round((valid / total) * 100)}%` : "—"}
+          color="#a78bfa"
+        />
       </Box>
 
-      {/* Main anomaly pattern */}
-      <InsightBox icon={<BarChart2 size={14} />} title="Main anomaly pattern">
+      <InsightBox icon={<BarChart2 size={14} />} title="main_anomaly_pattern">
         {topAnomaly
           ? topAnomaly.anomalyReason
           : results.length === 0
-            ? 'Run analysis to surface anomaly patterns.'
-            : 'No suspicious patterns detected in this dataset.'}
+          ? "Awaiting dataset scan..."
+          : "No suspicious patterns detected in this dataset."}
       </InsightBox>
 
-      {/* NSA pipeline note */}
-      <InsightBox icon={<CheckCircle2 size={14} />} title="Pipeline status">
+      <InsightBox icon={<CheckCircle2 size={14} />} title="pipeline_status">
         {results.length === 0
-          ? 'Awaiting first dataset scan.'
-          : `${valid} record${valid !== 1 ? 's' : ''} cleared for sentiment analysis. ${suspicious > 0 ? `${suspicious} blocked by NSA filter.` : 'All records valid.'}`}
+          ? "NSA engine idle. Waiting for feedback buffer."
+          : `${valid} record${
+              valid !== 1 ? "s" : ""
+            } cleared for sentiment analysis. ${
+              suspicious > 0
+                ? `${suspicious} blocked by NSA filter.`
+                : "All records valid."
+            }`}
       </InsightBox>
     </Paper>
   );
@@ -133,16 +156,30 @@ function MiniStat({
       elevation={0}
       sx={{
         p: 2,
-        borderRadius: 3,
-        bgcolor: 'grey.50',
-        border: '1px solid',
-        borderColor: 'grey.200',
+        borderRadius: 2.5,
+        bgcolor: "#020617",
+        border: "1px solid rgba(148,163,184,0.18)",
+        boxShadow: "inset 0 0 18px rgba(15,23,42,0.8)",
       }}
     >
-      <Typography variant="h6" sx={{ fontWeight: 800, color }}>
+      <Typography
+        variant="h6"
+        sx={{
+          fontWeight: 900,
+          color,
+          fontFamily: "monospace",
+        }}
+      >
         {value}
       </Typography>
-      <Typography variant="caption" color="text.secondary">
+
+      <Typography
+        variant="caption"
+        sx={{
+          color: "#94a3b8",
+          fontFamily: "monospace",
+        }}
+      >
         {label}
       </Typography>
     </Paper>
@@ -163,18 +200,48 @@ function InsightBox({
       sx={{
         p: 2.5,
         mt: 2,
-        borderRadius: 4,
-        bgcolor: 'grey.50',
-        border: '1px solid',
-        borderColor: 'grey.200',
+        borderRadius: 3,
+        bgcolor: "#020617",
+        border: "1px solid rgba(34,211,238,0.18)",
       }}
     >
-      <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mb: 1 }}>
-        <Box sx={{ color: 'text.secondary', display: 'flex' }}>{icon}</Box>
-        <Chip label="Insight" size="small" />
-        <Typography sx={{ fontWeight: 800, fontSize: '0.88rem' }}>{title}</Typography>
+      <Stack direction="row" spacing={1} sx={{ alignItems: "center", mb: 1 }}>
+        <Box sx={{ color: "#22d3ee", display: "flex" }}>{icon}</Box>
+
+        <Chip
+          label="INSIGHT"
+          size="small"
+          sx={{
+            height: 22,
+            fontSize: "0.68rem",
+            fontWeight: 900,
+            fontFamily: "monospace",
+            bgcolor: "rgba(34,211,238,0.12)",
+            color: "#67e8f9",
+            border: "1px solid rgba(34,211,238,0.35)",
+          }}
+        />
+
+        <Typography
+          sx={{
+            fontWeight: 900,
+            fontSize: "0.86rem",
+            color: "#e5e7eb",
+            fontFamily: "monospace",
+          }}
+        >
+          {title}
+        </Typography>
       </Stack>
-      <Typography variant="body2" sx={{ color: 'text.secondary', lineHeight: 1.7 }}>
+
+      <Typography
+        variant="body2"
+        sx={{
+          color: "#94a3b8",
+          lineHeight: 1.7,
+          fontFamily: "monospace",
+        }}
+      >
         {children}
       </Typography>
     </Box>

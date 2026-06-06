@@ -1,58 +1,217 @@
-import { Box, Chip, Container, Divider, Paper, Stack, Typography } from '@mui/material';
-import { BarChart2, BookOpen, CheckCircle2, Clock, FileText, Lightbulb, TrendingUp } from 'lucide-react';
-import { PipelineTracker } from '../components/PipelineTracker';
-import { buildSteps } from '../data/pipelineSteps';
+import {
+  Box,
+  Chip,
+  Container,
+  Divider,
+  Paper,
+  Stack,
+  Typography,
+} from "@mui/material";
+import {
+  BarChart2,
+  BookOpen,
+  CheckCircle2,
+  Clock,
+  FileText,
+  Lightbulb,
+  TrendingUp,
+} from "lucide-react";
+import { PipelineTracker } from "../components/PipelineTracker";
+import { buildSteps } from "../data/pipelineSteps";
 
 export function InsightStoryPage() {
   return (
     <Box sx={{ py: 4 }}>
       <Container maxWidth={false} sx={{ maxWidth: 1600 }}>
-
         {/* ── Hero ── */}
         <Paper
           elevation={0}
           sx={{
+            position: "relative",
             p: { xs: 3, md: 5 },
             mb: 4,
-            borderRadius: 5,
-            background: 'linear-gradient(135deg, #0f172a 0%, #1c1917 50%, #7c2d12 100%)',
-            color: 'white',
-            position: 'relative',
-            overflow: 'hidden',
+            borderRadius: 4,
+
+            bgcolor: "#050816",
+
+            color: "#e5e7eb",
+
+            overflow: "hidden",
+
+            border: "1px solid rgba(249,115,22,.18)",
+
+            boxShadow: "0 0 45px rgba(249,115,22,.08)",
+
+            backgroundImage: `
+      radial-gradient(circle at top right,
+      rgba(249,115,22,.16),
+      transparent 32%),
+
+      linear-gradient(
+      135deg,
+      #050816 0%,
+      #111827 100%)
+    `,
           }}
         >
-          <Box sx={{
-            position: 'absolute', top: -60, right: -60,
-            width: 300, height: 300, borderRadius: '50%',
-            background: 'radial-gradient(circle, rgba(249,115,22,0.18) 0%, transparent 70%)',
-            pointerEvents: 'none',
-          }} />
+          {/* Grid overlay */}
+          <Box
+            sx={{
+              position: "absolute",
+              inset: 0,
 
-          <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center', mb: 3 }}>
-            <Box sx={{
-              width: 48, height: 48, borderRadius: 3,
-              background: 'linear-gradient(135deg,#ea580c,#f97316)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
-              <FileText size={24} color="white" />
-            </Box>
-            <Box>
-              <Chip
-                label="Coming in Part 3"
-                size="small"
-                icon={<Clock size={11} />}
-                sx={{ bgcolor: 'rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.85)', mb: 0.5 }}
-              />
-              <Typography variant="h3" sx={{ fontWeight: 800, lineHeight: 1, fontSize: { xs: '1.9rem', md: '2.8rem' } }}>
-                Insight Story
-              </Typography>
-            </Box>
-          </Stack>
+              opacity: 0.12,
 
-          <Typography variant="h6" sx={{ maxWidth: 640, color: 'rgba(255,255,255,0.75)', fontWeight: 400, lineHeight: 1.7 }}>
-            AI-generated narrative summaries that turn NSA anomaly data and sentiment scores into
-            decision-ready insight reports for event organisers.
-          </Typography>
+              backgroundImage:
+                "linear-gradient(rgba(249,115,22,.12) 1px, transparent 1px), linear-gradient(90deg, rgba(249,115,22,.12) 1px, transparent 1px)",
+
+              backgroundSize: "30px 30px",
+
+              pointerEvents: "none",
+            }}
+          />
+
+          <Box sx={{ position: "relative", zIndex: 1 }}>
+            <Stack
+              direction="row"
+              spacing={2}
+              sx={{
+                alignItems: "center",
+                mb: 3,
+              }}
+            >
+              <Box
+                sx={{
+                  width: 56,
+                  height: 56,
+
+                  borderRadius: 3,
+
+                  bgcolor: "#020617",
+
+                  border: "1px solid rgba(249,115,22,.35)",
+
+                  display: "flex",
+
+                  alignItems: "center",
+
+                  justifyContent: "center",
+
+                  boxShadow: "0 0 22px rgba(249,115,22,.25)",
+                }}
+              >
+                <FileText size={28} color="#fb923c" />
+              </Box>
+
+              <Box>
+                <Chip
+                  label="$ insight_story --pending"
+                  size="small"
+                  icon={<Clock size={11} />}
+                  sx={{
+                    mb: 1,
+
+                    bgcolor: "rgba(249,115,22,.1)",
+
+                    color: "#fdba74",
+
+                    border: "1px solid rgba(249,115,22,.3)",
+
+                    fontWeight: 800,
+
+                    fontFamily: "monospace",
+                  }}
+                />
+
+                <Typography
+                  variant="h3"
+                  sx={{
+                    fontWeight: 900,
+
+                    lineHeight: 1,
+
+                    color: "#f8fafc",
+
+                    fontFamily: "monospace",
+
+                    fontSize: {
+                      xs: "2rem",
+                      md: "3rem",
+                    },
+                  }}
+                >
+                  &gt; Insight_Story<span style={{ color: "#f97316" }}>.</span>
+                </Typography>
+              </Box>
+            </Stack>
+
+            <Typography
+              variant="h6"
+              sx={{
+                maxWidth: 760,
+
+                color: "#94a3b8",
+
+                fontWeight: 400,
+
+                lineHeight: 1.8,
+
+                fontFamily: "monospace",
+              }}
+            >
+              Generate AI-powered narrative reports from NSA anomaly detection
+              and sentiment analysis. Convert raw feedback signals into
+              executive-ready decisions, risk indicators, and event performance
+              insights.
+            </Typography>
+
+            <Stack
+              direction={{
+                xs: "column",
+                sm: "row",
+              }}
+              spacing={1.5}
+              sx={{
+                mt: 3,
+                flexWrap: "wrap",
+              }}
+            >
+              {["generate_summary()", "detect_patterns()", "build_story()"].map(
+                (step) => (
+                  <Chip
+                    key={step}
+                    label={step}
+                    size="small"
+                    sx={{
+                      bgcolor: "#020617",
+
+                      color: "#fed7aa",
+
+                      border: "1px solid rgba(249,115,22,.25)",
+
+                      fontFamily: "monospace",
+
+                      fontWeight: 700,
+                    }}
+                  />
+                ),
+              )}
+            </Stack>
+
+            <Typography
+              sx={{
+                mt: 4,
+
+                color: "rgba(148,163,184,.55)",
+
+                fontSize: ".78rem",
+
+                fontFamily: "monospace",
+              }}
+            >
+              STATUS → awaiting sentiment engine integration...
+            </Typography>
+          </Box>
         </Paper>
 
         {/* ── Pipeline context ── */}
@@ -63,15 +222,22 @@ export function InsightStoryPage() {
         />
 
         {/* ── Feature cards ── */}
-        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' }, gap: 3, mb: 3 }}>
+        <Box
+          sx={{
+            display: "grid",
+            gridTemplateColumns: { xs: "1fr", md: "repeat(3, 1fr)" },
+            gap: 3,
+            mb: 3,
+          }}
+        >
           <FeatureCard
             icon={<BarChart2 size={22} />}
             title="Aggregated Signal Metrics"
             color="#6366f1"
             items={[
-              'Total vs valid vs suspicious record counts',
-              'Sentiment distribution breakdown',
-              'NSA anomaly pattern summary',
+              "Total vs valid vs suspicious record counts",
+              "Sentiment distribution breakdown",
+              "NSA anomaly pattern summary",
             ]}
           />
           <FeatureCard
@@ -79,9 +245,9 @@ export function InsightStoryPage() {
             title="AI Narrative Generation"
             color="#ea580c"
             items={[
-              'Plain-language summary of feedback quality',
-              'Highlights main anomaly patterns detected',
-              'Identifies dominant sentiment trends',
+              "Plain-language summary of feedback quality",
+              "Highlights main anomaly patterns detected",
+              "Identifies dominant sentiment trends",
             ]}
           />
           <FeatureCard
@@ -89,68 +255,224 @@ export function InsightStoryPage() {
             title="Decision Support Output"
             color="#0891b2"
             items={[
-              'Actionable recommendations for organisers',
-              'Exportable PDF / JSON report format',
-              'Suitable for stakeholder presentation',
+              "Actionable recommendations for organisers",
+              "Exportable PDF / JSON report format",
+              "Suitable for stakeholder presentation",
             ]}
           />
         </Box>
 
         {/* ── Placeholder report preview ── */}
-        <Paper elevation={0} sx={{ p: { xs: 3, md: 4 }, borderRadius: 5, bgcolor: 'white', border: '1px dashed', borderColor: 'grey.300' }}>
-          <Stack direction="row" spacing={2} sx={{ alignItems: 'center', mb: 3 }}>
+        <Paper
+          elevation={0}
+          sx={{
+            p: 4,
+            borderRadius: 4,
+            bgcolor: "#050816",
+            border: "1px solid rgba(249,115,22,.18)",
+            color: "#e5e7eb",
+            boxShadow: "0 0 35px rgba(249,115,22,.08)",
+          }}
+        >
+          <Stack
+            direction="row"
+            spacing={2}
+            sx={{ alignItems: "center", mb: 3 }}
+          >
             <BookOpen size={20} color="#ea580c" />
-            <Typography variant="h6" sx={{ fontWeight: 800 }}>Preview — Sample insight report</Typography>
-            <Chip label="Placeholder" size="small" sx={{ bgcolor: 'grey.100' }} />
+            <Typography variant="h6" sx={{ fontWeight: 800 }}>
+              Preview — Sample insight report
+            </Typography>
+            <Chip
+              label="$ preview_output"
+              sx={{
+                bgcolor: "rgba(249,115,22,.1)",
+                color: "#fb923c",
+                fontFamily: "monospace",
+              }}
+            />
           </Stack>
 
-          <Paper elevation={0} sx={{ p: 3, borderRadius: 4, bgcolor: '#fafafa', border: '1px solid', borderColor: 'grey.200', opacity: 0.75 }}>
+          <Paper
+            elevation={0}
+            sx={{
+              p: 3,
+              borderRadius: 4,
+              bgcolor: "#fafafa",
+              border: "1px solid",
+              borderColor: "grey.200",
+              opacity: 0.75,
+            }}
+          >
             {/* Report header */}
-            <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+            <Stack
+              direction={{ xs: "column", sm: "row" }}
+              spacing={2}
+              sx={{
+                justifyContent: "space-between",
+                alignItems: { xs: "flex-start", sm: "flex-start" },
+                mb: 2,
+              }}
+            >
               <Box>
-                <Typography sx={{ fontWeight: 800, fontSize: '1.1rem' }}>Event Feedback Analysis Report</Typography>
-                <Typography variant="caption" color="text.secondary">Generated by EventSense AI · Hybrid NSA + Sentiment Pipeline</Typography>
+                <Typography
+                  sx={{
+                    fontWeight: 900,
+                    fontSize: "1.1rem",
+                    color: "#000000",
+                    fontFamily: "monospace",
+                  }}
+                >
+                  &gt; event_feedback_analysis.report
+                </Typography>
+
+                <Typography
+                  variant="caption"
+                  sx={{
+                    color: "#94a3b8",
+                    fontFamily: "monospace",
+                  }}
+                >
+                  Generated by EventSense_AI · hybrid_nsa_sentiment_pipeline()
+                </Typography>
               </Box>
-              <Chip label="Sample output" size="small" sx={{ bgcolor: 'rgba(234,88,12,0.1)', color: '#ea580c' }} />
+
+              <Chip
+                label="$ sample_output"
+                size="small"
+                sx={{
+                  bgcolor: "rgba(249,115,22,0.1)",
+                  color: "#fb923c",
+                  border: "1px solid rgba(249,115,22,0.3)",
+                  fontWeight: 800,
+                  fontFamily: "monospace",
+                }}
+              />
             </Stack>
 
             <Divider sx={{ mb: 2 }} />
 
             {/* Metrics row */}
-            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 1.5, mb: 2.5 }}>
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: "repeat(4, 1fr)",
+                gap: 1.5,
+                mb: 2.5,
+              }}
+            >
               {[
-                { label: 'Total records', value: '8', color: '#6366f1' },
-                { label: 'Valid (NSA)', value: '5', color: '#22c55e' },
-                { label: 'Suspicious', value: '3', color: '#ef4444' },
-                { label: 'Positive sentiment', value: '80%', color: '#0891b2' },
+                { label: "Total records", value: "8", color: "#6366f1" },
+                { label: "Valid (NSA)", value: "5", color: "#22c55e" },
+                { label: "Suspicious", value: "3", color: "#ef4444" },
+                { label: "Positive sentiment", value: "80%", color: "#0891b2" },
               ].map((m) => (
-                <Paper key={m.label} elevation={0} sx={{ p: 1.5, borderRadius: 3, bgcolor: 'white', border: '1px solid', borderColor: 'grey.200', textAlign: 'center' }}>
-                  <Typography sx={{ fontWeight: 900, fontSize: '1.4rem', color: m.color, lineHeight: 1 }}>{m.value}</Typography>
-                  <Typography variant="caption" color="text.secondary">{m.label}</Typography>
+                <Paper
+                  key={m.label}
+                  elevation={0}
+                  sx={{
+                    p: 2,
+                    borderRadius: 3,
+                    bgcolor: "#020617",
+                    border: `1px solid ${m.color}20`,
+                    boxShadow: `0 0 20px ${m.color}10`,
+                  }}
+                >
+                  <Typography
+                    sx={{
+                      color: `${m.color}`, //"#94a3b8",
+                      fontWeight: 900,
+                      fontFamily: "monospace",
+                      textShadow: `0 0 18px ${m.color}`,
+                    }}
+                  >
+                    {m.value}
+                  </Typography>
+                  <Typography
+                    /* variant="caption" */
+                    /* color="text.secondary" */
+                    sx={{
+                      color: "#94a3b8",
+                      fontFamily: "monospace",
+                    }}
+                  >
+                    {m.label}
+                  </Typography>
                 </Paper>
               ))}
             </Box>
 
             {/* Narrative body */}
-            <Box sx={{ p: 2.5, borderRadius: 3, bgcolor: 'white', border: '1px solid', borderColor: 'grey.200' }}>
-              <Typography variant="body2" sx={{ lineHeight: 1.9, color: 'text.secondary' }}>
-                <strong style={{ color: '#111827' }}>Summary:</strong> Analysis of 8 feedback records identified{' '}
-                <strong style={{ color: '#ef4444' }}>3 suspicious entries</strong> via the Negative Selection Algorithm, primarily
-                exhibiting spam-like keyword patterns and gibberish token sequences. The remaining{' '}
-                <strong style={{ color: '#22c55e' }}>5 valid records</strong> were submitted to sentiment classification.
-                <br /><br />
-                <strong style={{ color: '#111827' }}>Sentiment overview:</strong> Of the valid records, the majority expressed{' '}
-                <strong style={{ color: '#22c55e' }}>positive sentiment</strong> towards the event's organisation, speaker quality,
-                and venue. One record registered as neutral, noting a late start while acknowledging content quality.
-                <br /><br />
-                <strong style={{ color: '#111827' }}>Recommendation:</strong> The high anomaly rate (37.5%) suggests the feedback
-                collection channel may benefit from CAPTCHA or rate-limiting controls. Valid feedback signals indicate overall
-                positive event reception.
+            <Box
+              sx={{
+                p: 3,
+                borderRadius: 3,
+                bgcolor: "#020617",
+                border: "1px solid rgba(249,115,22,.15)",
+                fontFamily: "monospace",
+                position: "relative",
+                "&::before": {
+                  content: '"Generated Report"',
+                  position: "absolute",
+                  top: 12,
+                  right: 16,
+                  color: "#fb923c",
+                  fontSize: ".7rem",
+                },
+              }}
+            >
+              <Typography
+                variant="body2"
+                sx={{
+                  lineHeight: 2,
+                  color: "#cbd5e1",
+                  fontFamily: "monospace",
+                }}
+              >
+                <strong style={{ color: "#ffffff" }}>Summary:</strong> Analysis
+                of 8 feedback records identified{" "}
+                <strong style={{ color: "#ef4444" }}>
+                  3 suspicious entries
+                </strong>{" "}
+                via the Negative Selection Algorithm, primarily exhibiting
+                spam-like keyword patterns and gibberish token sequences. The
+                remaining{" "}
+                <strong style={{ color: "#22c55e" }}>5 valid records</strong>{" "}
+                were submitted to sentiment classification.
+                <br />
+                <br />
+                <strong style={{ color: "#ffffff" }}>
+                  Sentiment overview:
+                </strong>{" "}
+                Of the valid records, the majority expressed{" "}
+                <strong style={{ color: "#22c55e" }}>positive sentiment</strong>{" "}
+                towards the event's organisation, speaker quality, and venue.
+                One record registered as neutral, noting a late start while
+                acknowledging content quality.
+                <br />
+                <br />
+                <strong style={{ color: "#ffffff" }}>
+                  Recommendation:
+                </strong>{" "}
+                The high anomaly rate (37.5%) suggests the feedback collection
+                channel may benefit from CAPTCHA or rate-limiting controls.
+                Valid feedback signals indicate overall positive event
+                reception.
               </Typography>
             </Box>
           </Paper>
-        </Paper>
 
+          <Typography
+            sx={{
+              mt: 3,
+              color: "rgba(148,163,184,.5)",
+              fontSize: ".75rem",
+              fontFamily: "monospace",
+            }}
+          >
+            STATUS → report_generator.awaiting_model_output()
+          </Typography>
+        </Paper>
       </Container>
     </Box>
   );
@@ -160,19 +482,88 @@ export function InsightStoryPage() {
 // Sub-component
 // ---------------------------------------------------------------------------
 
-function FeatureCard({ icon, title, color, items }: { icon: React.ReactNode; title: string; color: string; items: string[] }) {
+function FeatureCard({
+  icon,
+  title,
+  color,
+  items,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  color: string;
+  items: string[];
+}) {
   return (
-    <Paper elevation={0} sx={{ p: 3, borderRadius: 4, bgcolor: 'white', border: '1px solid', borderColor: 'grey.200' }}>
-      <Box sx={{ width: 44, height: 44, borderRadius: 3, bgcolor: `${color}18`, display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 2, color }}>
+    <Paper
+      elevation={0}
+      sx={{
+        p: 3,
+        borderRadius: 3,
+        bgcolor: "#020617",
+        border: `1px solid ${color}30`,
+        color: "#e5e7eb",
+        boxShadow: `0 0 22px ${color}12`,
+        transition: ".2s",
+        "&:hover": {
+          transform: "translateY(-4px)",
+          boxShadow: `0 0 35px ${color}22`,
+        },
+      }}
+    >
+      <Box
+        sx={{
+          width: 52,
+          height: 52,
+          borderRadius: 3,
+          bgcolor: "#050816",
+          border: `1px solid ${color}40`,
+          boxShadow: `0 0 18px ${color}22`,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          mb: 2.5,
+          color,
+        }}
+      >
         {icon}
       </Box>
-      <Typography sx={{ fontWeight: 700, mb: 1.5 }}>{title}</Typography>
-      <Divider sx={{ mb: 1.5 }} />
+      <Typography
+        sx={{
+          fontWeight: 900,
+          color: "#f8fafc",
+          fontFamily: "monospace",
+        }}
+      >
+        {title}
+      </Typography>
+      <Divider
+        sx={{
+          mb: 1.5,
+          borderColor: "rgba(255,255,255,.06)",
+        }}
+      />
       <Stack spacing={1}>
         {items.map((item) => (
-          <Stack key={item} direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
-            <CheckCircle2 size={14} color={color} style={{ marginTop: 2, flexShrink: 0 }} />
-            <Typography variant="body2" color="text.secondary">{item}</Typography>
+          <Stack
+            key={item}
+            direction="row"
+            spacing={1}
+            sx={{ alignItems: "flex-start" }}
+          >
+            <CheckCircle2
+              size={14}
+              color={color}
+              style={{ marginTop: 2, flexShrink: 0 }}
+            />
+            <Typography
+              variant="body2"
+              sx={{
+                color: "#94a3b8",
+                fontFamily: "monospace",
+              }}
+            >
+              {item}
+            </Typography>
           </Stack>
         ))}
       </Stack>

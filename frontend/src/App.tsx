@@ -119,32 +119,102 @@ function NsaPage() {
 
         {/* ── Hero banner ── */}
         <Paper
-          elevation={0}
+  elevation={0}
+  sx={{
+    position: 'relative',
+    p: { xs: 3, md: 5 },
+    mb: 4,
+    borderRadius: 4,
+    bgcolor: '#050816',
+    color: '#e5e7eb',
+    overflow: 'hidden',
+    border: '1px solid rgba(34,211,238,0.25)',
+    boxShadow: '0 0 45px rgba(34,211,238,0.1)',
+    fontFamily: 'monospace',
+    backgroundImage: `
+      radial-gradient(circle at top right, rgba(34,211,238,0.18), transparent 32%),
+      linear-gradient(135deg, #050816 0%, #020617 55%, #111827 100%)
+    `,
+  }}
+>
+  <Box
+    sx={{
+      position: 'absolute',
+      inset: 0,
+      opacity: 0.18,
+      backgroundImage:
+        'linear-gradient(rgba(34,211,238,0.15) 1px, transparent 1px), linear-gradient(90deg, rgba(34,211,238,0.15) 1px, transparent 1px)',
+      backgroundSize: '32px 32px',
+      pointerEvents: 'none',
+    }}
+  />
+
+  <Box sx={{ position: 'relative', zIndex: 1 }}>
+    <Chip
+      label="$ deliverable_04 --prototype"
+      size="small"
+      sx={{
+        mb: 2,
+        bgcolor: 'rgba(34,211,238,0.1)',
+        color: '#67e8f9',
+        border: '1px solid rgba(34,211,238,0.35)',
+        letterSpacing: 1,
+        textTransform: 'uppercase',
+        fontWeight: 800,
+        fontFamily: 'monospace',
+      }}
+    />
+
+    <Typography
+      variant="h2"
+      sx={{
+        fontWeight: 900,
+        fontSize: { xs: '2.2rem', md: '3.6rem' },
+        lineHeight: 1,
+        mb: 2,
+        color: '#f8fafc',
+        fontFamily: 'monospace',
+      }}
+    >
+      &gt; NSA_Feedback_Filter<span style={{ color: '#22d3ee' }}>.</span>
+    </Typography>
+
+    <Typography
+      variant="h6"
+      sx={{
+        maxWidth: 760,
+        color: '#94a3b8',
+        fontWeight: 400,
+        lineHeight: 1.7,
+        fontFamily: 'monospace',
+      }}
+    >
+      Negative Selection Algorithm preprocesses feedback records, blocks suspicious
+      entries, and protects the sentiment analysis pipeline from noisy or malicious input.
+    </Typography>
+
+    <Stack
+      direction={{ xs: 'column', sm: 'row' }}
+      spacing={1.5}
+      sx={{ mt: 3, flexWrap: 'wrap' }}
+    >
+      {['input.scan()', 'nsa.detect()', 'sentiment.safe_queue()'].map((cmd) => (
+        <Chip
+          key={cmd}
+          label={cmd}
+          size="small"
           sx={{
-            p: { xs: 3, md: 5 },
-            mb: 4,
-            borderRadius: 5,
-            background: 'linear-gradient(135deg, #111827 0%, #312e81 55%, #7c2d12 100%)',
-            color: 'white',
-            overflow: 'hidden',
+            bgcolor: '#020617',
+            color: '#bbf7d0',
+            border: '1px solid rgba(34,197,94,0.25)',
+            fontFamily: 'monospace',
+            fontWeight: 700,
           }}
-        >
-          <Chip
-            label="Deliverable 04 — Preliminary Prototype"
-            size="small"
-            sx={{ mb: 2, bgcolor: 'rgba(255,255,255,0.14)', color: 'white', letterSpacing: 1, textTransform: 'uppercase' }}
-          />
-          <Typography
-            variant="h2"
-            sx={{ fontWeight: 800, fontSize: { xs: '2.2rem', md: '3.5rem' }, lineHeight: 1, mb: 2 }}
-          >
-            NSA Feedback Filter
-          </Typography>
-          <Typography variant="h6" sx={{ maxWidth: 680, color: 'rgba(255,255,255,0.78)', fontWeight: 400 }}>
-            Negative Selection Algorithm pre-processes feedback records, blocking suspicious
-            entries before they reach sentiment analysis in the next phase.
-          </Typography>
-        </Paper>
+        />
+      ))}
+    </Stack>
+  </Box>
+</Paper>
 
         {/* ── Pipeline tracker ── */}
         <PipelineTracker
