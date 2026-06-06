@@ -49,13 +49,13 @@ const NAV_ITEMS: NavItem[] = [
     page: "sentiment",
     icon: <BrainCircuit size={18} />,
     label: "Sentiment",
-    sublabel: "Coming in Deliverable 6",
+    sublabel: "Coming soon",
   },
   {
     page: "insight",
     icon: <FileText size={18} />,
     label: "Insight Story",
-    sublabel: "Coming in Deliverable 6",
+    sublabel: "Coming soon",
   },
 ];
 
