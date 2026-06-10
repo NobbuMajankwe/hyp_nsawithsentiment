@@ -5,12 +5,9 @@ Part 1 of the Hybrid Sentiment Analysis + NSA Feedback Analysis System.
 
 HOW THE ALGORITHM WORKS
 ------------------------
-Biological inspiration:
-  In the immune system, T-cells are trained to ignore "self" (normal body
-  cells). Any cell that is NOT recognised as self triggers an immune response.
-  NSA mimics this: we define "normal" feedback as the self-space, generate
-  random detectors that cover the non-self space, then flag any feedback that
-  matches a detector as anomalous.
+we define "normal" feedback as the self-space, generate 
+random detectors that cover the non-self space, then flag any feedback that
+matches a detector as anomalous.
 
 Pipeline:
   1. Preprocess   → lowercase, strip punctuation, collapse whitespace

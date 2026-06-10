@@ -374,7 +374,9 @@ function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
     <Box
       sx={{
-        minHeight: "100vh",
+        minHeight: "105vh",
+        maxHeight: "105vh",
+        m: -5,
         display: "grid",
         gridTemplateColumns: { xs: "1fr", md: "1.1fr 0.9fr" },
         background:

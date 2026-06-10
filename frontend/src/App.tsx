@@ -113,128 +113,191 @@ function NsaPage() {
     setError(null);
   }
 
-  return (
-    <Box sx={{ py: 4 }}>
-      <Container maxWidth={false} sx={{ maxWidth: 1400 }}>
-
-        {/* ── Hero banner ── */}
-        <Paper
-  elevation={0}
-  sx={{
-    position: 'relative',
-    p: { xs: 3, md: 5 },
-    mb: 4,
-    borderRadius: 4,
-    bgcolor: '#050816',
-    color: '#e5e7eb',
-    overflow: 'hidden',
-    border: '1px solid rgba(34,211,238,0.25)',
-    boxShadow: '0 0 45px rgba(34,211,238,0.1)',
-    fontFamily: 'monospace',
-    backgroundImage: `
-      radial-gradient(circle at top right, rgba(34,211,238,0.18), transparent 32%),
-      linear-gradient(135deg, #050816 0%, #020617 55%, #111827 100%)
-    `,
-  }}
->
+ return (
   <Box
     sx={{
-      position: 'absolute',
-      inset: 0,
-      opacity: 0.18,
-      backgroundImage:
-        'linear-gradient(rgba(34,211,238,0.15) 1px, transparent 1px), linear-gradient(90deg, rgba(34,211,238,0.15) 1px, transparent 1px)',
-      backgroundSize: '32px 32px',
-      pointerEvents: 'none',
+      minHeight: `calc(100vh - ${HEADER_HEIGHT}px)`,
+      py: { xs: 3, md: 6 },
+      background: `
+        radial-gradient(circle at top left, rgba(99,102,241,0.16), transparent 30%),
+        radial-gradient(circle at bottom right, rgba(236,72,153,0.12), transparent 28%),
+        #f8f5ef
+      `,
     }}
-  />
+  >
+    <Container maxWidth="xl">
+      {/* Creative intro section */}
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr', lg: '1.1fr 0.9fr' },
+          gap: 4,
+          alignItems: 'center',
+          mb: 5,
+        }}
+      >
+        <Box>
+          <Chip
+            label="Negative Selection Prototype"
+            sx={{
+              mb: 2,
+              bgcolor: '#111827',
+              color: '#fff',
+              fontWeight: 700,
+              borderRadius: 999,
+            }}
+          />
 
-  <Box sx={{ position: 'relative', zIndex: 1 }}>
-    <Chip
-      label="$ deliverable_04 --prototype"
-      size="small"
-      sx={{
-        mb: 2,
-        bgcolor: 'rgba(34,211,238,0.1)',
-        color: '#67e8f9',
-        border: '1px solid rgba(34,211,238,0.35)',
-        letterSpacing: 1,
-        textTransform: 'uppercase',
-        fontWeight: 800,
-        fontFamily: 'monospace',
-      }}
-    />
+          <Typography
+            sx={{
+              fontSize: { xs: '2.4rem', md: '4rem' },
+              fontWeight: 950,
+              lineHeight: 0.95,
+              letterSpacing: '-0.06em',
+              color: '#111827',
+              maxWidth: 760,
+            }}
+          >
+            Let the AI inspect your feedback before sentiment analysis begins.
+          </Typography>
 
-    <Typography
-      variant="h2"
-      sx={{
-        fontWeight: 900,
-        fontSize: { xs: '2.2rem', md: '3.6rem' },
-        lineHeight: 1,
-        mb: 2,
-        color: '#f8fafc',
-        fontFamily: 'monospace',
-      }}
-    >
-      &gt; NSA_Feedback_Filter<span style={{ color: '#22d3ee' }}>.</span>
-    </Typography>
+          <Typography
+            sx={{
+              mt: 3,
+              maxWidth: 680,
+              fontSize: '1.05rem',
+              color: '#6b7280',
+              lineHeight: 1.8,
+            }}
+          >
+            This prototype uses a Negative Selection Algorithm to separate normal
+            feedback from suspicious or noisy records, then prepares the clean data
+            for the next stage of analysis.
+          </Typography>
 
-    <Typography
-      variant="h6"
-      sx={{
-        maxWidth: 760,
-        color: '#94a3b8',
-        fontWeight: 400,
-        lineHeight: 1.7,
-        fontFamily: 'monospace',
-      }}
-    >
-      Negative Selection Algorithm preprocesses feedback records, blocks suspicious
-      entries, and protects the sentiment analysis pipeline from noisy or malicious input.
-    </Typography>
+          <Stack
+            direction="row"
+            spacing={1}
+            sx={{ mt: 3, flexWrap: 'wrap', gap: 1 }}
+          >
+            {['Load feedback', 'Detect anomalies', 'Protect sentiment flow'].map((item) => (
+              <Chip
+                key={item}
+                label={item}
+                sx={{
+                  bgcolor: '#fff',
+                  border: '1px solid #e5e7eb',
+                  fontWeight: 700,
+                }}
+              />
+            ))}
+          </Stack>
+        </Box>
 
-    <Stack
-      direction={{ xs: 'column', sm: 'row' }}
-      spacing={1.5}
-      sx={{ mt: 3, flexWrap: 'wrap' }}
-    >
-      {['input.scan()', 'nsa.detect()', 'sentiment.safe_queue()'].map((cmd) => (
-        <Chip
-          key={cmd}
-          label={cmd}
-          size="small"
+        {/* Visual story card instead of dashboard banner */}
+        <Paper
+          elevation={0}
           sx={{
-            bgcolor: '#020617',
-            color: '#bbf7d0',
-            border: '1px solid rgba(34,197,94,0.25)',
-            fontFamily: 'monospace',
-            fontWeight: 700,
-          }}
-        />
-      ))}
-    </Stack>
-  </Box>
-</Paper>
-
-        {/* ── Pipeline tracker ── */}
-        <PipelineTracker
-          subtitle={results.length === 0 ? 'Step 1 of 4 — Load Dataset' : 'Step 2 of 4 — Negative Selection Filter'}
-          steps={buildSteps(results.length === 0 ? 0 : 1)}
-          activeColor="#6366f1"
-        />
-
-        {/* ── Main two-column grid ── */}
-        <Box
-          component="main"
-          sx={{
-            display: 'grid',
-            gridTemplateColumns: { xs: '1fr', xl: 'minmax(0,1fr) 340px' },
-            gap: 3,
-            alignItems: 'start',
+            p: 3,
+            borderRadius: 6,
+            bgcolor: '#111827',
+            color: '#fff',
+            position: 'relative',
+            overflow: 'hidden',
+            minHeight: 300,
+            boxShadow: '0 30px 80px rgba(17,24,39,0.22)',
           }}
         >
-          {/* Left: input + record cards + charts */}
-          <Stack spacing={3}>
+          <Box
+            sx={{
+              position: 'absolute',
+              width: 220,
+              height: 220,
+              borderRadius: '50%',
+              bgcolor: 'rgba(99,102,241,0.35)',
+              top: -70,
+              right: -60,
+              filter: 'blur(8px)',
+            }}
+          />
+
+          <Box sx={{ position: 'relative', zIndex: 1 }}>
+            <Typography sx={{ fontWeight: 800, mb: 3 }}>
+              Feedback Journey
+            </Typography>
+
+            {[
+              ['01', 'Raw comments arrive'],
+              ['02', 'NSA scans for abnormal patterns'],
+              ['03', 'Clean feedback continues to sentiment'],
+              ['04', 'Insights become a readable story'],
+            ].map(([num, text]) => (
+              <Stack
+                key={num}
+                direction="row"
+                spacing={2}
+                sx={{
+                  p: 1.5,
+                  mb: 1.5,
+                  borderRadius: 3,
+                  bgcolor: 'rgba(255,255,255,0.08)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  alignItems:"center"
+                }}
+              >
+                <Box
+                  sx={{
+                    width: 38,
+                    height: 38,
+                    borderRadius: '50%',
+                    display: 'grid',
+                    placeItems: 'center',
+                    bgcolor: '#fff',
+                    color: '#111827',
+                    fontWeight: 900,
+                  }}
+                >
+                  {num}
+                </Box>
+                <Typography sx={{ fontWeight: 700 }}>{text}</Typography>
+              </Stack>
+            ))}
+          </Box>
+        </Paper>
+      </Box>
+
+      {/* Pipeline tracker */}
+      <PipelineTracker
+        subtitle={
+          results.length === 0
+            ? 'Start by loading or editing the feedback dataset'
+            : 'NSA scan complete — review detected records'
+        }
+        steps={buildSteps(results.length === 0 ? 0 : 1)}
+        activeColor="#6366f1"
+      />
+
+      {/* Workspace layout */}
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr', xl: 'minmax(0, 1fr) 380px' },
+          gap: 3,
+          alignItems: 'start',
+          mt: 3,
+        }}
+      >
+        <Stack spacing={3}>
+          <Paper
+            elevation={0}
+            sx={{
+              p: { xs: 2, md: 3 },
+              borderRadius: 5,
+              bgcolor: 'rgba(255,255,255,0.82)',
+              backdropFilter: 'blur(16px)',
+              border: '1px solid rgba(229,231,235,0.8)',
+            }}
+          >
             <InputPanel
               value={datasetText}
               onChange={setDatasetText}
@@ -242,25 +305,34 @@ function NsaPage() {
               onReset={handleReset}
               loading={loading}
             />
-            <FeedbackCanvas results={results} />
-            <AnalyticsCharts results={results} />
-          </Stack>
+          </Paper>
 
-          {/* Right: findings summary */}
+          <FeedbackCanvas results={results} />
+
+          {results.length > 0 && <AnalyticsCharts results={results} />}
+        </Stack>
+
+        <Box
+          sx={{
+            position: { xl: 'sticky' },
+            top: 24,
+          }}
+        >
           <FindingsPanel summary={summary} results={results} />
         </Box>
-      </Container>
+      </Box>
+    </Container>
 
-      <Snackbar
-        open={!!error}
-        autoHideDuration={8000}
-        onClose={() => setError(null)}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      >
-        <Alert severity="error" onClose={() => setError(null)} sx={{ width: '100%' }}>
-          {error}
-        </Alert>
-      </Snackbar>
-    </Box>
-  );
+    <Snackbar
+      open={!!error}
+      autoHideDuration={8000}
+      onClose={() => setError(null)}
+      anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+    >
+      <Alert severity="error" onClose={() => setError(null)} sx={{ width: '100%' }}>
+        {error}
+      </Alert>
+    </Snackbar>
+  </Box>
+);
 }

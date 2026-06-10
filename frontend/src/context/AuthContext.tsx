@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
+import { attachAuthInterceptor } from '../services/api';
 
 export interface AuthUser {
   id: string;
@@ -48,6 +49,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem(USER_KEY);
     setState({ token: null, user: null });
   }, []);
+
+  // Attach the 401 interceptor once, wired to this logout function
+  useEffect(() => {
+    attachAuthInterceptor(logout);
+  }, [logout]);
 
   return (
     <AuthContext.Provider value={{ ...state, login, logout, isAuthenticated: !!state.token }}>

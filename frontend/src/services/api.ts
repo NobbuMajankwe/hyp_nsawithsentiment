@@ -5,6 +5,30 @@ import type { AuthUser } from '../context/AuthContext';
 const BASE_URL = ''; // Vite proxies /api/* → localhost:8000
 
 // ---------------------------------------------------------------------------
+// Axios instance with a 401 interceptor
+// ---------------------------------------------------------------------------
+
+export const apiClient = axios.create({ baseURL: BASE_URL });
+
+/**
+ * Attach a 401 interceptor after the auth context is ready.
+ * Called once from AuthProvider so we have access to `logout`.
+ */
+export function attachAuthInterceptor(logout: () => void) {
+  apiClient.interceptors.response.use(
+    (res) => res,
+    (error) => {
+      if (error?.response?.status === 401) {
+        // Token is missing, expired, or the backend restarted with a new secret.
+        // Clear the session so the user is sent back to the login page.
+        logout();
+      }
+      return Promise.reject(error);
+    },
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Auth
 // ---------------------------------------------------------------------------
 
@@ -19,12 +43,12 @@ export async function apiRegister(payload: {
   password: string;
   role: 'event_organiser' | 'system_admin';
 }): Promise<AuthResponse> {
-  const { data } = await axios.post<AuthResponse>(`${BASE_URL}/api/auth/register`, payload);
+  const { data } = await apiClient.post<AuthResponse>('/api/auth/register', payload);
   return data;
 }
 
 export async function apiLogin(email: string, password: string): Promise<AuthResponse> {
-  const { data } = await axios.post<AuthResponse>(`${BASE_URL}/api/auth/login`, { email, password });
+  const { data } = await apiClient.post<AuthResponse>('/api/auth/login', { email, password });
   return data;
 }
 
@@ -43,8 +67,8 @@ export async function runNsaAnalysis(
   feedback: string[],
   token: string,
 ): Promise<AnalyseResponse> {
-  const { data } = await axios.post<AnalyseResponse>(
-    `${BASE_URL}/api/nsa/analyse`,
+  const { data } = await apiClient.post<AnalyseResponse>(
+    '/api/nsa/analyse',
     { feedback },
     { headers: { Authorization: `Bearer ${token}` } },
   );

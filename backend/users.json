@@ -2,9 +2,17 @@
   "30c94cee-fe93-4174-ae9a-fcd7747c228e": {
     "id": "30c94cee-fe93-4174-ae9a-fcd7747c228e",
     "full_name": "Shereen Nobubelo Ncube",
-    "email": "nobbumajankwe@gmail.com",
+    "email": "nobbumajankwes@gmail.com",
     "role": "event_organiser",
     "hashed_password": "pbkdf2:e457fd3abc81b0de24fd8c80b941a561:3c68aec16d3cb3cc398ad0ba162c2433292e56cf6f1c30ba5c915e314e1413f5",
     "created_at": 1780651325.01488
+  },
+  "6c22cf2c-557a-4665-b97b-a70bd2aae374": {
+    "id": "6c22cf2c-557a-4665-b97b-a70bd2aae374",
+    "full_name": "Shereen Nobubelo Ncube",
+    "email": "nobbumajankwe@gmail.com",
+    "role": "event_organiser",
+    "hashed_password": "$2b$12$k.CjUkAGmfMa4QkQ5f.HqeswLJbx7zv/tHy1n6CjKuLAZyDF0nVq2",
+    "created_at": 1780742270.979671
   }
 }

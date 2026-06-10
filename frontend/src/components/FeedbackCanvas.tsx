@@ -1,12 +1,27 @@
+import { useState } from "react";
 import {
   Box,
   Chip,
+  Collapse,
+  IconButton,
   LinearProgress,
   Paper,
   Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
   Typography,
 } from "@mui/material";
-import { ShieldCheck, ShieldAlert, Tag, Terminal } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  ShieldAlert,
+  ShieldCheck,
+  Terminal,
+} from "lucide-react";
 import type { AnalysisResult } from "../types";
 
 interface Props {
@@ -14,7 +29,28 @@ interface Props {
 }
 
 export function FeedbackCanvas({ results }: Props) {
-  if (results.length === 0) {
+  /* if (results.length === 0) {
+    return (
+      <Paper
+        elevation={0}
+        sx={{
+          p: 7,
+          borderRadius: 5,
+          bgcolor: "#050816",
+          color: "#e5e7eb",
+          textAlign: "center",
+          border: "1px solid rgba(34,211,238,0.25)",
+          boxShadow: "0 0 40px rgba(34,211,238,0.08)",
+        }}
+      >
+        <Terminal size={34} color="#22d3ee" />
+        <Typography sx={{ mt: 2, color: "#94a3b8" }}>
+          Paste feedback and run the NSA scan to inspect records.
+        </Typography>
+      </Paper>
+    );
+  } */
+ if (results.length === 0) {
     return (
       <Paper
         elevation={0}
@@ -42,104 +78,149 @@ export function FeedbackCanvas({ results }: Props) {
     <Paper
       elevation={0}
       sx={{
-        p: { xs: 2.5, md: 4 },
-        borderRadius: 4,
+        overflow: "hidden",
+        borderRadius: 5,
         bgcolor: "#050816",
         color: "#e5e7eb",
         border: "1px solid rgba(34,211,238,0.25)",
-        boxShadow: "0 0 40px rgba(34,211,238,0.08)",
-        fontFamily: "monospace",
+        boxShadow: "0 0 45px rgba(34,211,238,0.08)",
       }}
     >
-      <Stack spacing={1} sx={{ mb: 4 }}>
-        <Typography
-          variant="caption"
-          sx={{
-            color: "#22d3ee",
-            textTransform: "uppercase",
-            letterSpacing: 1,
-            fontWeight: 800,
-          }}
-        >
-          ~/eventsense-ai/output-canvas
-        </Typography>
-
-        <Typography variant="h4" sx={{ fontWeight: 900, color: "#f8fafc" }}>
-          &gt; analysed_records<span style={{ color: "#22d3ee" }}>[]</span>
-        </Typography>
-
-        <Typography sx={{ color: "#94a3b8" }}>
-          NSA scan results rendered from the feedback buffer.
-        </Typography>
-      </Stack>
-
       <Box
         sx={{
-          display: "grid",
-          gridTemplateColumns: { xs: "1fr", md: "repeat(2, 1fr)" },
-          gap: 3,
+          p: 3,
+          borderBottom: "1px solid rgba(148,163,184,0.18)",
+          background:
+            "linear-gradient(135deg, rgba(34,211,238,0.12), rgba(99,102,241,0.08), transparent)",
         }}
       >
-        {results.map((item) => (
-          <RecordCard key={item.id} item={item} />
-        ))}
+        <Typography
+          variant="overline"
+          sx={{
+            color: "#22d3ee",
+            fontWeight: 900,
+            letterSpacing: 1.5,
+            fontFamily: "monospace",
+          }}
+        >
+          ~/eventsense-ai/nsa-output
+        </Typography>
+
+        <Typography
+          variant="h5"
+          sx={{
+            fontWeight: 900,
+            mt: 0.5,
+            color: "#f8fafc",
+          }}
+        >
+          Feedback Inspection Results
+        </Typography>
+
+        <Typography sx={{ color: "#94a3b8", mt: 1 }}>
+          Compact NSA table. Click a record to expand full details.
+        </Typography>
       </Box>
+
+      <TableContainer>
+        <Table size="small">
+          <TableHead>
+            <TableRow sx={{ bgcolor: "#020617" }}>
+              {["", "Record", "Feedback", "Status", "Score"].map((header) => (
+                <TableCell
+                  key={header}
+                  sx={{
+                    color: "#94a3b8",
+                    fontWeight: 900,
+                    borderBottom: "1px solid rgba(148,163,184,0.18)",
+                    fontFamily: "monospace",
+                  }}
+                >
+                  {header}
+                </TableCell>
+              ))}
+            </TableRow>
+          </TableHead>
+
+          <TableBody>
+            {results.map((item) => (
+              <ExpandableRecordRow key={item.id} item={item} />
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
     </Paper>
   );
 }
 
-function RecordCard({ item }: { item: AnalysisResult }) {
+function ExpandableRecordRow({ item }: { item: AnalysisResult }) {
+  const [open, setOpen] = useState(false);
   const suspicious = item.nsaStatus === "Suspicious";
 
   return (
-    <Paper
-      elevation={0}
-      sx={{
-        p: 3,
-        borderRadius: 3,
-        bgcolor: suspicious ? "rgba(127,29,29,0.35)" : "rgba(6,78,59,0.25)",
-        border: "1px solid",
-        borderColor: suspicious
-          ? "rgba(248,113,113,0.45)"
-          : "rgba(34,211,238,0.28)",
-        transition: "0.25s",
-        position: "relative",
-        overflow: "hidden",
-        "&:hover": {
-          transform: "translateY(-4px)",
-          boxShadow: suspicious
-            ? "0 0 28px rgba(239,68,68,0.18)"
-            : "0 0 28px rgba(34,211,238,0.18)",
-        },
-      }}
-    >
-      <Stack
-        direction="row"
-        sx={{ justifyContent: "space-between", alignItems: "center", mb: 2 }}
+    <>
+      <TableRow
+        hover
+        onClick={() => setOpen((value) => !value)}
+        sx={{
+          cursor: "pointer",
+          bgcolor: suspicious
+            ? "rgba(127,29,29,0.25)"
+            : "rgba(6,78,59,0.14)",
+          "&:hover": {
+            bgcolor: suspicious
+              ? "rgba(127,29,29,0.38)"
+              : "rgba(6,78,59,0.24)",
+          },
+        }}
       >
-        <Typography
-          variant="caption"
+        <TableCell
           sx={{
-            fontWeight: 800,
-            color: "#94a3b8",
-            fontFamily: "monospace",
+            width: 48,
+            borderBottom: "1px solid rgba(148,163,184,0.12)",
           }}
         >
-          record_id: #{item.id}
-        </Typography>
+          <IconButton size="small" sx={{ color: "#cbd5e1" }}>
+            {open ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+          </IconButton>
+        </TableCell>
 
-        <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
-          {suspicious ? (
-            <ShieldAlert size={16} color="#f87171" />
-          ) : (
-            <ShieldCheck size={16} color="#22d3ee" />
-          )}
+        <TableCell sx={{ borderBottom: "1px solid rgba(148,163,184,0.12)" }}>
+          <Typography sx={{ color: "#f8fafc", fontWeight: 900 }}>
+            #{item.id}
+          </Typography>
+        </TableCell>
 
+        <TableCell
+          sx={{
+            maxWidth: 420,
+            borderBottom: "1px solid rgba(148,163,184,0.12)",
+          }}
+        >
+          <Typography
+            noWrap
+            sx={{
+              color: "#cbd5e1",
+              fontSize: "0.88rem",
+            }}
+          >
+            {item.originalText}
+          </Typography>
+        </TableCell>
+
+        <TableCell sx={{ borderBottom: "1px solid rgba(148,163,184,0.12)" }}>
           <Chip
-            label={item.nsaStatus.toLowerCase()}
+            icon={
+              suspicious ? (
+                <ShieldAlert size={14} />
+              ) : (
+                <ShieldCheck size={14} />
+              )
+            }
+            label={item.nsaStatus}
             size="small"
             sx={{
-              fontWeight: 800,
+              fontWeight: 900,
               fontFamily: "monospace",
               bgcolor: suspicious
                 ? "rgba(239,68,68,0.15)"
@@ -147,141 +228,163 @@ function RecordCard({ item }: { item: AnalysisResult }) {
               color: suspicious ? "#fca5a5" : "#67e8f9",
               border: "1px solid",
               borderColor: suspicious
-                ? "rgba(248,113,113,0.45)"
-                : "rgba(34,211,238,0.45)",
+                ? "rgba(248,113,113,0.35)"
+                : "rgba(34,211,238,0.35)",
             }}
           />
-        </Stack>
-      </Stack>
+        </TableCell>
+
+        <TableCell
+          sx={{
+            minWidth: 160,
+            borderBottom: "1px solid rgba(148,163,184,0.12)",
+          }}
+        >
+          <Stack direction="row" spacing={1.5} sx={{alignItems:"center"}}>
+            <Typography sx={{ color: "#f8fafc", fontWeight: 900 }}>
+              {item.anomalyScore}%
+            </Typography>
+
+            <LinearProgress
+              variant="determinate"
+              value={item.anomalyScore}
+              sx={{
+                flex: 1,
+                height: 7,
+                borderRadius: 99,
+                bgcolor: "rgba(148,163,184,0.18)",
+                "& .MuiLinearProgress-bar": {
+                  borderRadius: 99,
+                  bgcolor: suspicious ? "#f87171" : "#22d3ee",
+                },
+              }}
+            />
+          </Stack>
+        </TableCell>
+      </TableRow>
+
+      <TableRow>
+        <TableCell
+          colSpan={5}
+          sx={{
+            p: 0,
+            borderBottom: open
+              ? "1px solid rgba(148,163,184,0.14)"
+              : "none",
+            bgcolor: "#020617",
+          }}
+        >
+          <Collapse in={open} timeout="auto" unmountOnExit>
+            <Box sx={{ p: 3 }}>
+              <Box
+                sx={{
+                  display: "grid",
+                  gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" },
+                  gap: 2,
+                }}
+              >
+                <DetailBlock title="Raw feedback" value={item.originalText} />
+
+                <DetailBlock
+                  title="Cleaned output"
+                  value={item.cleanedText || "NULL"}
+                  mono
+                />
+
+                <Box
+                  sx={{
+                    p: 2,
+                    borderRadius: 3,
+                    bgcolor: "#050816",
+                    border: "1px solid rgba(148,163,184,0.16)",
+                  }}
+                >
+                  <Typography
+                    sx={{
+                      color: "#22d3ee",
+                      fontWeight: 900,
+                      mb: 1,
+                      fontSize: "0.78rem",
+                      textTransform: "uppercase",
+                      letterSpacing: 1,
+                    }}
+                  >
+                    Tokens
+                  </Typography>
+
+                  <Stack direction="row" spacing={0.7} sx={{ flexWrap:"wrap"}} useFlexGap>
+                    {item.tokens.length > 0 ? (
+                      item.tokens.map((token) => (
+                        <Chip
+                          key={token}
+                          label={token}
+                          size="small"
+                          sx={{
+                            bgcolor: "rgba(15,23,42,0.95)",
+                            color: "#cbd5e1",
+                            border: "1px solid rgba(148,163,184,0.22)",
+                            fontFamily: "monospace",
+                          }}
+                        />
+                      ))
+                    ) : (
+                      <Typography variant="caption" sx={{ color: "#64748b" }}>
+                        No meaningful tokens
+                      </Typography>
+                    )}
+                  </Stack>
+                </Box>
+
+                <DetailBlock title="Reason" value={item.anomalyReason} />
+              </Box>
+            </Box>
+          </Collapse>
+        </TableCell>
+      </TableRow>
+    </>
+  );
+}
+
+function DetailBlock({
+  title,
+  value,
+  mono = false,
+}: {
+  title: string;
+  value: string;
+  mono?: boolean;
+}) {
+  return (
+    <Box
+      sx={{
+        p: 2,
+        borderRadius: 3,
+        bgcolor: "#050816",
+        border: "1px solid rgba(148,163,184,0.16)",
+      }}
+    >
+      <Typography
+        sx={{
+          color: "#22d3ee",
+          fontWeight: 900,
+          mb: 1,
+          fontSize: "0.78rem",
+          textTransform: "uppercase",
+          letterSpacing: 1,
+        }}
+      >
+        {title}
+      </Typography>
 
       <Typography
         sx={{
-          fontSize: "0.95rem",
-          lineHeight: 1.8,
-          mb: 2.5,
-          color: "#e5e7eb",
+          color: "#cbd5e1",
+          lineHeight: 1.7,
+          fontFamily: mono ? "monospace" : "inherit",
         }}
       >
-        <span style={{ color: "#22d3ee" }}>raw:</span> "{item.originalText}"
+        {value}
       </Typography>
-
-      <Box
-        sx={{
-          p: 1.5,
-          mb: 2.5,
-          borderRadius: 2,
-          bgcolor: "#020617",
-          border: "1px solid rgba(148,163,184,0.2)",
-        }}
-      >
-        <Typography
-          variant="caption"
-          sx={{
-            fontWeight: 800,
-            color: "#22d3ee",
-            display: "block",
-            mb: 0.5,
-          }}
-        >
-          cleaned_output
-        </Typography>
-
-        <Typography
-          variant="body2"
-          sx={{ fontFamily: "monospace", color: "#bbf7d0" }}
-        >
-          {item.cleanedText || "null"}
-        </Typography>
-      </Box>
-
-      <Box
-        sx={{
-          display: "flex",
-          flexDirection: "row",
-          flexWrap: "wrap",
-          gap: 0.75,
-          alignItems: "center",
-          mb: 2.5,
-        }}
-      >
-        <Tag size={14} style={{ flexShrink: 0, color: "#22d3ee" }} />
-
-        {item.tokens.length > 0 ? (
-          item.tokens.map((token) => (
-            <Chip
-              key={token}
-              label={token}
-              size="small"
-              sx={{
-                bgcolor: "rgba(15,23,42,0.95)",
-                color: "#cbd5e1",
-                border: "1px solid rgba(148,163,184,0.22)",
-                fontFamily: "monospace",
-                fontSize: "0.72rem",
-              }}
-            />
-          ))
-        ) : (
-          <Typography variant="caption" sx={{ color: "#64748b" }}>
-            no meaningful tokens
-          </Typography>
-        )}
-      </Box>
-
-      <Stack spacing={0.7} sx={{ mb: 2 }}>
-        <Stack direction="row" sx={{ justifyContent: "space-between" }}>
-          <Typography
-            variant="caption"
-            sx={{ color: "#94a3b8", fontWeight: 800 }}
-          >
-            anomaly_score
-          </Typography>
-          <Typography
-            variant="caption"
-            sx={{ fontWeight: 900, color: "#f8fafc" }}
-          >
-            {item.anomalyScore}%
-          </Typography>
-        </Stack>
-
-        <LinearProgress
-          variant="determinate"
-          value={item.anomalyScore}
-          sx={{
-            height: 9,
-            borderRadius: 99,
-            bgcolor: "rgba(148,163,184,0.16)",
-            "& .MuiLinearProgress-bar": {
-              borderRadius: 99,
-              bgcolor: suspicious ? "#f87171" : "#22d3ee",
-              boxShadow: suspicious
-                ? "0 0 14px rgba(248,113,113,0.65)"
-                : "0 0 14px rgba(34,211,238,0.65)",
-            },
-          }}
-        />
-      </Stack>
-
-      <Box
-        sx={{
-          p: 1.5,
-          borderRadius: 2,
-          bgcolor: suspicious ? "rgba(127,29,29,0.35)" : "rgba(6,78,59,0.25)",
-          border: "1px solid rgba(148,163,184,0.16)",
-        }}
-      >
-        <Typography variant="body2" sx={{ color: "#cbd5e1", lineHeight: 1.7 }}>
-          <span
-            style={{
-              color: suspicious ? "#f87171" : "#22d3ee",
-              fontWeight: 800,
-            }}
-          >
-            reason:
-          </span>{" "}
-          {item.anomalyReason}
-        </Typography>
-      </Box>
-    </Paper>
+    </Box>
   );
 }

@@ -420,7 +420,8 @@ export function InputPanel({
       <TextField
         multiline
         fullWidth
-        minRows={9}
+        minRows={3}
+        maxRows={5}
         value={value}
         onChange={(e) => {
           onChange(e.target.value);
