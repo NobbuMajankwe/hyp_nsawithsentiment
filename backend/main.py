@@ -25,16 +25,21 @@ from auth import (
     decode_access_token,
     get_user_by_id,
 )
+from database import init_db
 
 # ---------------------------------------------------------------------------
 # App setup
 # ---------------------------------------------------------------------------
 
 app = FastAPI(
-    title="EventSense AI",
+    title="SignalCheck AI",
     description="NSA anomaly detection with JWT authentication.",
-    version="0.2.0",
+    version="0.3.0",
 )
+
+@app.on_event("startup")
+def on_startup():
+    init_db()
 
 app.add_middleware(
     CORSMiddleware,

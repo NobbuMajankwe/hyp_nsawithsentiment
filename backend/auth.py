@@ -1,17 +1,16 @@
 """
-auth.py — Authentication layer for EventSense AI
+auth.py — Authentication layer for SignalCheck AI
 ==================================================
 Provides:
-  - Password hashing with bcrypt
-  - JWT creation and verification (HS256)
-  - A simple JSON file-based user store (no external DB required for the prototype)
+  - Password hashing with bcrypt (stdlib PBKDF2 fallback)
+  - JWT creation / verification (HS256, pure stdlib)
+  - User CRUD backed by PostgreSQL via database.py
   - Role definitions: event_organiser | system_admin
-
-User records are persisted to users.json in the backend directory.
 """
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import hmac
 import json
@@ -19,21 +18,17 @@ import os
 import re
 import time
 import uuid
-import base64
-from dataclasses import asdict, dataclass
-from pathlib import Path
+from dataclasses import dataclass
 from typing import Optional
+
+from database import get_cursor
 
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
 
-# Secret key used to sign JWTs.  In production this MUST come from an env var.
 JWT_SECRET: str = os.getenv("JWT_SECRET", "signalcheck-dev-secret-change-in-prod")
-JWT_ALGORITHM: str = "HS256"
-JWT_EXPIRY_SECONDS: int = 60 * 60 * 8  # 8 hours
-
-USERS_FILE: Path = Path(__file__).parent / "users.json"
+JWT_EXPIRY_SECONDS: int = 60 * 60 * 8   # 8 hours
 
 VALID_ROLES = {"event_organiser", "system_admin"}
 
@@ -48,58 +43,55 @@ class UserRecord:
     full_name: str
     email: str
     role: str
-    hashed_password: str   # bcrypt or fallback hash
-    created_at: float      # Unix timestamp
+    hashed_password: str
+    created_at: float   # Unix timestamp (converted from pg TIMESTAMPTZ)
 
 
 # ---------------------------------------------------------------------------
-# Simple JWT implementation (no external library)
+# JWT (pure stdlib HS256)
 # ---------------------------------------------------------------------------
-# We implement a minimal HS256 JWT so the only extra dependency is bcrypt
-# (for password hashing).  Structure: header.payload.signature, base64url-encoded.
 
 def _b64url_encode(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode()
 
 
-def _b64url_decode(data: str) -> bytes:
-    padding = 4 - len(data) % 4
-    return base64.urlsafe_b64decode(data + "=" * padding)
+def _b64url_decode(s: str) -> bytes:
+    pad = 4 - len(s) % 4
+    return base64.urlsafe_b64decode(s + "=" * pad)
 
 
 def _create_jwt(payload: dict) -> str:
     header = _b64url_encode(json.dumps({"alg": "HS256", "typ": "JWT"}).encode())
-    body = _b64url_encode(json.dumps(payload).encode())
-    signing_input = f"{header}.{body}".encode()
-    signature = hmac.new(JWT_SECRET.encode(), signing_input, hashlib.sha256).digest()
-    return f"{header}.{body}.{_b64url_encode(signature)}"
+    body   = _b64url_encode(json.dumps(payload).encode())
+    sig    = hmac.new(JWT_SECRET.encode(), f"{header}.{body}".encode(), hashlib.sha256).digest()
+    return f"{header}.{body}.{_b64url_encode(sig)}"
 
 
 def _verify_jwt(token: str) -> Optional[dict]:
     try:
         header, body, sig = token.split(".")
-        signing_input = f"{header}.{body}".encode()
-        expected_sig = hmac.new(JWT_SECRET.encode(), signing_input, hashlib.sha256).digest()
-        if not hmac.compare_digest(_b64url_decode(sig), expected_sig):
+        expected = hmac.new(
+            JWT_SECRET.encode(), f"{header}.{body}".encode(), hashlib.sha256
+        ).digest()
+        if not hmac.compare_digest(_b64url_decode(sig), expected):
             return None
         payload = json.loads(_b64url_decode(body))
         if payload.get("exp", 0) < time.time():
-            return None   # expired
+            return None
         return payload
     except Exception:
         return None
 
 
 def create_access_token(user: UserRecord) -> str:
-    payload = {
-        "sub": user.id,
+    return _create_jwt({
+        "sub":   user.id,
         "email": user.email,
-        "role": user.role,
-        "name": user.full_name,
-        "iat": int(time.time()),
-        "exp": int(time.time()) + JWT_EXPIRY_SECONDS,
-    }
-    return _create_jwt(payload)
+        "role":  user.role,
+        "name":  user.full_name,
+        "iat":   int(time.time()),
+        "exp":   int(time.time()) + JWT_EXPIRY_SECONDS,
+    })
 
 
 def decode_access_token(token: str) -> Optional[dict]:
@@ -107,7 +99,7 @@ def decode_access_token(token: str) -> Optional[dict]:
 
 
 # ---------------------------------------------------------------------------
-# Password hashing — prefer bcrypt, fall back to PBKDF2-HMAC-SHA256
+# Password hashing — bcrypt preferred, PBKDF2 fallback
 # ---------------------------------------------------------------------------
 
 try:
@@ -120,100 +112,26 @@ try:
         return _bcrypt.checkpw(plain.encode(), hashed.encode())
 
 except ImportError:
-    # Fallback: PBKDF2-HMAC-SHA256 — available in the Python stdlib
-    import hashlib as _hashlib
+    _ITER = 260_000
 
-    _ITERATIONS = 260_000
-
-    def hash_password(plain: str) -> str:  # type: ignore[misc]
+    def hash_password(plain: str) -> str:   # type: ignore[misc]
         salt = os.urandom(16).hex()
-        dk = _hashlib.pbkdf2_hmac("sha256", plain.encode(), salt.encode(), _ITERATIONS)
+        dk = hashlib.pbkdf2_hmac("sha256", plain.encode(), salt.encode(), _ITER)
         return f"pbkdf2:{salt}:{dk.hex()}"
 
-    def verify_password(plain: str, hashed: str) -> bool:  # type: ignore[misc]
+    def verify_password(plain: str, hashed: str) -> bool:   # type: ignore[misc]
         if not hashed.startswith("pbkdf2:"):
             return False
         _, salt, stored = hashed.split(":", 2)
-        dk = _hashlib.pbkdf2_hmac("sha256", plain.encode(), salt.encode(), _ITERATIONS)
+        dk = hashlib.pbkdf2_hmac("sha256", plain.encode(), salt.encode(), _ITER)
         return hmac.compare_digest(dk.hex(), stored)
 
 
 # ---------------------------------------------------------------------------
-# User store (JSON file)
+# Validation
 # ---------------------------------------------------------------------------
 
-def _load_users() -> dict[str, UserRecord]:
-    if not USERS_FILE.exists():
-        return {}
-    try:
-        raw = json.loads(USERS_FILE.read_text())
-        return {uid: UserRecord(**data) for uid, data in raw.items()}
-    except Exception:
-        return {}
-
-
-def _save_users(users: dict[str, UserRecord]) -> None:
-    USERS_FILE.write_text(json.dumps({uid: asdict(u) for uid, u in users.items()}, indent=2))
-
-
-def get_user_by_email(email: str) -> Optional[UserRecord]:
-    users = _load_users()
-    for user in users.values():
-        if user.email.lower() == email.lower():
-            return user
-    return None
-
-
-def get_user_by_id(user_id: str) -> Optional[UserRecord]:
-    return _load_users().get(user_id)
-
-
-def create_user(full_name: str, email: str, password: str, role: str) -> UserRecord:
-    """
-    Create and persist a new user.
-    Raises ValueError on validation failures.
-    """
-    # --- Validation ---
-    full_name = full_name.strip()
-    email = email.strip().lower()
-
-    if not full_name or len(full_name) < 2:
-        raise ValueError("Full name must be at least 2 characters.")
-
-    if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
-        raise ValueError("Invalid email address.")
-
-    if role not in VALID_ROLES:
-        raise ValueError(f"Role must be one of: {', '.join(sorted(VALID_ROLES))}.")
-
-    _validate_password_strength(password)
-
-    if get_user_by_email(email):
-        raise ValueError("An account with this email already exists.")
-
-    # --- Create record ---
-    user = UserRecord(
-        id=str(uuid.uuid4()),
-        full_name=full_name,
-        email=email,
-        role=role,
-        hashed_password=hash_password(password),
-        created_at=time.time(),
-    )
-    users = _load_users()
-    users[user.id] = user
-    _save_users(users)
-    return user
-
-
 def _validate_password_strength(password: str) -> None:
-    """
-    Enforce minimum password requirements:
-      - At least 8 characters
-      - At least one uppercase letter
-      - At least one lowercase letter
-      - At least one digit
-    """
     if len(password) < 8:
         raise ValueError("Password must be at least 8 characters.")
     if not re.search(r"[A-Z]", password):
@@ -222,6 +140,79 @@ def _validate_password_strength(password: str) -> None:
         raise ValueError("Password must contain at least one lowercase letter.")
     if not re.search(r"\d", password):
         raise ValueError("Password must contain at least one number.")
+
+
+# ---------------------------------------------------------------------------
+# Row → UserRecord helper
+# ---------------------------------------------------------------------------
+
+def _row_to_user(row: dict) -> UserRecord:
+    """Convert a psycopg2 RealDictRow to a UserRecord dataclass."""
+    return UserRecord(
+        id=str(row["id"]),
+        full_name=row["full_name"],
+        email=row["email"],
+        role=row["role"],
+        hashed_password=row["hashed_password"],
+        created_at=row["created_at"].timestamp() if hasattr(row["created_at"], "timestamp") else float(row["created_at"]),
+    )
+
+
+# ---------------------------------------------------------------------------
+# User CRUD — PostgreSQL
+# ---------------------------------------------------------------------------
+
+def get_user_by_email(email: str) -> Optional[UserRecord]:
+    with get_cursor() as cur:
+        cur.execute(
+            "SELECT * FROM users WHERE LOWER(email) = LOWER(%s) LIMIT 1",
+            (email.strip(),),
+        )
+        row = cur.fetchone()
+    return _row_to_user(row) if row else None
+
+
+def get_user_by_id(user_id: str) -> Optional[UserRecord]:
+    with get_cursor() as cur:
+        cur.execute("SELECT * FROM users WHERE id = %s LIMIT 1", (user_id,))
+        row = cur.fetchone()
+    return _row_to_user(row) if row else None
+
+
+def create_user(full_name: str, email: str, password: str, role: str) -> UserRecord:
+    """
+    Validate and insert a new user into PostgreSQL.
+    Raises ValueError on validation failures or duplicate email.
+    """
+    full_name = full_name.strip()
+    email     = email.strip().lower()
+
+    if not full_name or len(full_name) < 2:
+        raise ValueError("Full name must be at least 2 characters.")
+    if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
+        raise ValueError("Invalid email address.")
+    if role not in VALID_ROLES:
+        raise ValueError(f"Role must be one of: {', '.join(sorted(VALID_ROLES))}.")
+    _validate_password_strength(password)
+
+    if get_user_by_email(email):
+        raise ValueError("An account with this email already exists.")
+
+    user_id = str(uuid.uuid4())
+    pw_hash = hash_password(password)
+
+    with get_cursor(commit=True) as cur:
+        cur.execute(
+            """
+            INSERT INTO users (id, full_name, email, role, hashed_password)
+            VALUES (%s, %s, %s, %s, %s)
+            RETURNING *
+            """,
+            (user_id, full_name, email, role, pw_hash),
+        )
+        row = cur.fetchone()
+
+    return _row_to_user(row)
 
 
 def authenticate_user(email: str, password: str) -> Optional[UserRecord]:
