@@ -1,17 +1,25 @@
-import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react';
+
 import { attachAuthInterceptor } from '../services/api';
 
-export interface AuthUser {
-  id: string;
-  fullName: string;
-  email: string;
-  role: 'EVENT_ORGANISER' | 'SYSTEM_ADMIN';
-}
+import {
+  TOKEN_KEY,
+  USER_KEY,
+  loadAuthState,
+} from '../utils/authStorage';
 
-interface AuthState {
-  token: string | null;
-  user: AuthUser | null;
-}
+import type {
+  AuthState,
+  AuthUser,
+} from '../types/auth';
 
 interface AuthContextValue extends AuthState {
   login: (token: string, user: AuthUser) => void;
@@ -19,51 +27,104 @@ interface AuthContextValue extends AuthState {
   isAuthenticated: boolean;
 }
 
-const AuthContext = createContext<AuthContextValue | null>(null);
+const AuthContext =
+  createContext<AuthContextValue | undefined>(
+    undefined,
+  );
 
-const TOKEN_KEY = 'signalcheck_token';
-const USER_KEY = 'signalcheck_user';
+export function AuthProvider({
+  children,
+}: {
+  children: ReactNode;
+}) {
+  const [state, setState] =
+    useState<AuthState>(
+      loadAuthState,
+    );
 
-function loadState(): AuthState {
-  try {
-    const token = localStorage.getItem(TOKEN_KEY);
-    const raw = localStorage.getItem(USER_KEY);
-    if (token && raw) return { token, user: JSON.parse(raw) };
-  } catch {
-    // ignore parse errors
-  }
-  return { token: null, user: null };
-}
+  const login = useCallback(
+    (
+      token: string,
+      user: AuthUser,
+    ) => {
+      localStorage.setItem(
+        TOKEN_KEY,
+        token,
+      );
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<AuthState>(loadState);
+      localStorage.setItem(
+        USER_KEY,
+        JSON.stringify(user),
+      );
 
-  const login = useCallback((token: string, user: AuthUser) => {
-    localStorage.setItem(TOKEN_KEY, token);
-    localStorage.setItem(USER_KEY, JSON.stringify(user));
-    setState({ token, user });
-  }, []);
+      setState({
+        token,
+        user,
+      });
+    },
+    [],
+  );
 
   const logout = useCallback(() => {
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(USER_KEY);
-    setState({ token: null, user: null });
+    localStorage.removeItem(
+      TOKEN_KEY,
+    );
+
+    localStorage.removeItem(
+      USER_KEY,
+    );
+
+    setState({
+      token: null,
+      user: null,
+    });
   }, []);
 
-  // Attach the 401 interceptor once, wired to this logout function
   useEffect(() => {
-    attachAuthInterceptor(logout);
+    attachAuthInterceptor(
+      logout,
+    );
   }, [logout]);
 
+  const value =
+    useMemo(
+      () => ({
+        ...state,
+        login,
+        logout,
+        isAuthenticated:
+          Boolean(
+            state.token,
+          ),
+      }),
+      [
+        state,
+        login,
+        logout,
+      ],
+    );
+
   return (
-    <AuthContext.Provider value={{ ...state, login, logout, isAuthenticated: !!state.token }}>
+    <AuthContext.Provider
+      value={value}
+    >
       {children}
     </AuthContext.Provider>
   );
 }
 
-export function useAuth(): AuthContextValue {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error('useAuth must be used inside AuthProvider');
+// eslint-disable-next-line react-refresh/only-export-components
+export function useAuth() {
+  const ctx =
+    useContext(
+      AuthContext,
+    );
+
+  if (!ctx) {
+    throw new Error(
+      'useAuth must be used inside AuthProvider',
+    );
+  }
+
   return ctx;
 }

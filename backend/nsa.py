@@ -5,7 +5,7 @@ Part 1 of the Hybrid Sentiment Analysis + NSA Feedback Analysis System.
 
 HOW THE ALGORITHM WORKS
 ------------------------
-we define "normal" feedback as the self-space, generate 
+we define "normal" feedback as the self-space, generate
 random detectors that cover the non-self space, then flag any feedback that
 matches a detector as anomalous.
 
@@ -31,19 +31,83 @@ import re
 import string
 from dataclasses import dataclass, field
 from typing import List, Optional
+from database import get_cursor
+import json
 
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
 STOP_WORDS: set[str] = {
-    "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for",
-    "of", "with", "by", "from", "is", "was", "are", "were", "be", "been",
-    "has", "have", "had", "do", "did", "does", "will", "would", "could",
-    "should", "may", "might", "it", "its", "this", "that", "these", "those",
-    "i", "we", "you", "he", "she", "they", "me", "us", "him", "her", "them",
-    "my", "our", "your", "his", "their", "what", "which", "who", "whom",
-    "not", "no", "so", "as", "if", "than", "then", "very", "just", "also",
+    "the",
+    "a",
+    "an",
+    "and",
+    "or",
+    "but",
+    "in",
+    "on",
+    "at",
+    "to",
+    "for",
+    "of",
+    "with",
+    "by",
+    "from",
+    "is",
+    "was",
+    "are",
+    "were",
+    "be",
+    "been",
+    "has",
+    "have",
+    "had",
+    "do",
+    "did",
+    "does",
+    "will",
+    "would",
+    "could",
+    "should",
+    "may",
+    "might",
+    "it",
+    "its",
+    "this",
+    "that",
+    "these",
+    "those",
+    "i",
+    "we",
+    "you",
+    "he",
+    "she",
+    "they",
+    "me",
+    "us",
+    "him",
+    "her",
+    "them",
+    "my",
+    "our",
+    "your",
+    "his",
+    "their",
+    "what",
+    "which",
+    "who",
+    "whom",
+    "not",
+    "no",
+    "so",
+    "as",
+    "if",
+    "than",
+    "then",
+    "very",
+    "just",
+    "also",
 }
 
 # "Normal" feedback samples used to define the self space during training.
@@ -66,6 +130,7 @@ NORMAL_FEEDBACK_CORPUS: list[str] = [
 # Data classes
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class Detector:
     """
@@ -75,6 +140,7 @@ class Detector:
     region. Any input whose distance to this detector is <= radius triggers
     a match (anomaly signal).
     """
+
     detector_id: int
     vector: list[float]
     radius: float
@@ -91,18 +157,20 @@ class Detector:
 @dataclass
 class NSAResult:
     """Per-record output returned to the API layer."""
+
     id: int
     original_text: str
     cleaned_text: str
     tokens: list[str]
-    nsa_status: str          # "Valid" | "Suspicious"
-    anomaly_score: int       # 0–100
+    nsa_status: str  # "Valid" | "Suspicious"
+    anomaly_score: int  # 0–100
     anomaly_reason: str
 
 
 @dataclass
 class NSAResponse:
     """Aggregate response returned by the analyse() entry point."""
+
     total_records: int
     valid_records: int
     suspicious_records: int
@@ -113,6 +181,7 @@ class NSAResponse:
 # Text utilities
 # ---------------------------------------------------------------------------
 
+
 def preprocess(text: str) -> str:
     """
     Lowercase, remove punctuation, collapse multiple whitespace into one.
@@ -122,7 +191,9 @@ def preprocess(text: str) -> str:
     """
     text = text.lower()
     # Replace punctuation with space so "free!" → "free "
-    text = text.translate(str.maketrans(string.punctuation, " " * len(string.punctuation)))
+    text = text.translate(
+        str.maketrans(string.punctuation, " " * len(string.punctuation))
+    )
     # Collapse whitespace
     text = re.sub(r"\s+", " ", text).strip()
     return text
@@ -135,7 +206,8 @@ def tokenise(text: str) -> list[str]:
     """
     cleaned = preprocess(text)
     tokens = [
-        token for token in cleaned.split()
+        token
+        for token in cleaned.split()
         if token not in STOP_WORDS and len(token) >= 2
     ]
     return tokens
@@ -144,6 +216,7 @@ def tokenise(text: str) -> list[str]:
 # ---------------------------------------------------------------------------
 # Vectorisation — pure Python bag-of-words (no sklearn)
 # ---------------------------------------------------------------------------
+
 
 def build_vocabulary(corpus: list[str]) -> list[str]:
     """
@@ -186,6 +259,7 @@ def text_to_vector(text: str, vocabulary: list[str]) -> list[float]:
 # Distance metric
 # ---------------------------------------------------------------------------
 
+
 def euclidean_distance(v1: list[float], v2: list[float]) -> float:
     """Standard Euclidean distance between two equal-length vectors."""
     return math.sqrt(sum((a - b) ** 2 for a, b in zip(v1, v2)))
@@ -194,6 +268,7 @@ def euclidean_distance(v1: list[float], v2: list[float]) -> float:
 # ---------------------------------------------------------------------------
 # Core NSA class
 # ---------------------------------------------------------------------------
+
 
 class NegativeSelectionAlgorithm:
     """
@@ -230,6 +305,7 @@ class NegativeSelectionAlgorithm:
 
         # Seed the PRNG once
         import random as _rnd
+
         self._rnd = _rnd.Random(random_seed)
 
     # ------------------------------------------------------------------
@@ -267,7 +343,9 @@ class NegativeSelectionAlgorithm:
         self.detectors = []
         attempts = 0
 
-        while len(self.detectors) < self.detector_count and attempts < self.max_attempts:
+        while (
+            len(self.detectors) < self.detector_count and attempts < self.max_attempts
+        ):
             attempts += 1
 
             # Sample a random candidate in the unit hypercube
@@ -280,13 +358,31 @@ class NegativeSelectionAlgorithm:
 
             if min_dist_to_self > self.self_match_threshold:
                 # Candidate is in non-self space → accept as detector
-                self.detectors.append(
-                    Detector(
-                        detector_id=len(self.detectors) + 1,
-                        vector=candidate,
-                        radius=self.detector_radius,
-                    )
+                detector = Detector(
+                    detector_id=len(self.detectors) + 1,
+                    vector=candidate,
+                    radius=self.detector_radius,
                 )
+                self.detectors.append(detector)
+                with get_cursor(commit=True) as cur:
+                    cur.execute(
+                        """
+                        INSERT INTO nsa_detectors
+                        (
+                            detector_vector,
+                            radius,
+                            threshold,
+                            detector_version
+                        )
+                        VALUES (%s,%s,%s,%s)
+                        """,
+                        (
+                            json.dumps(candidate),
+                            self.detector_radius,
+                            self.self_match_threshold,
+                            "NSA_V1",
+                        ),
+                    )
 
     # ------------------------------------------------------------------
     # Detection phase
@@ -350,13 +446,98 @@ class NegativeSelectionAlgorithm:
         """
         Analyse a list of feedback strings and return an NSAResponse.
         """
-        results: list[NSAResult] = [
-            self.detect_one(text, idx + 1)
-            for idx, text in enumerate(feedback_list)
-        ]
+        results = []
 
-        suspicious = sum(1 for r in results if r.nsa_status == "Suspicious")
-        valid = len(results) - suspicious
+        with get_cursor(commit=True) as cur:
+
+            cur.execute(
+                """
+                INSERT INTO datasets
+                (
+                    source_name,
+                    source_type,
+                    total_records
+                )
+                VALUES
+                (
+                    %s,
+                    %s,
+                    %s
+                )
+                RETURNING dataset_id
+                """,
+                (
+                    "Runtime Feedback Dataset",
+                    "API",
+                    len(feedback_list),
+                ),
+            )
+
+            dataset = cur.fetchone()
+            dataset_id = dataset["dataset_id"]
+
+        for idx, text in enumerate(feedback_list):
+
+            result = self.detect_one(text, idx + 1)
+
+            with get_cursor(commit=True) as cur:
+
+                cur.execute(
+                    """
+                    INSERT INTO feedback_records
+                    (
+                        dataset_id,
+                        raw_text,
+                        cleaned_text,
+                        tokens,
+                        preprocessing_complete,
+                        is_valid,
+                        is_anomalous
+                    )
+                    VALUES
+                    (
+                        %s,%s,%s,%s,%s,%s,%s
+                    )
+                    RETURNING feedback_id
+                    """,
+                    (
+                        dataset_id,
+                        result.original_text,
+                        result.cleaned_text,
+                        json.dumps(result.tokens),
+                        True,
+                        result.nsa_status == "Valid",
+                        result.nsa_status == "Suspicious",
+                    ),
+                )
+
+                feedback = cur.fetchone()
+
+                cur.execute(
+                    """
+                    INSERT INTO anomaly_results
+                    (
+                        feedback_id,
+                        is_anomalous,
+                        anomaly_score,
+                        anomaly_reason
+                    )
+                    VALUES
+                    (
+                        %s,%s,%s,%s
+                    )
+                    """,
+                    (
+                        feedback["feedback_id"],
+                        result.nsa_status == "Suspicious",
+                        result.anomaly_score,
+                        result.anomaly_reason,
+                    ),
+                )
+
+            results.append(result)
+            suspicious = sum(1 for r in results if r.nsa_status == "Suspicious")
+            valid = len(results) - suspicious
 
         return NSAResponse(
             total_records=len(results),

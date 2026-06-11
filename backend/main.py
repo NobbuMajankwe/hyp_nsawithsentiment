@@ -37,9 +37,11 @@ app = FastAPI(
     version="0.3.0",
 )
 
+
 @app.on_event("startup")
 def on_startup():
     init_db()
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -59,6 +61,7 @@ bearer_scheme = HTTPBearer()
 # ---------------------------------------------------------------------------
 # Auth dependency
 # ---------------------------------------------------------------------------
+
 
 def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
@@ -80,6 +83,7 @@ def get_current_user(
 # ---------------------------------------------------------------------------
 # Auth schemas
 # ---------------------------------------------------------------------------
+
 
 class RegisterRequest(BaseModel):
     fullName: str
@@ -109,6 +113,7 @@ class AuthResponse(BaseModel):
 # NSA schemas
 # ---------------------------------------------------------------------------
 
+
 class AnalyseRequest(BaseModel):
     feedback: List[str]
 
@@ -134,6 +139,7 @@ class AnalyseResponse(BaseModel):
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _nsa_result_to_item(r: NSAResult) -> ResultItem:
     return ResultItem(
         id=r.id,
@@ -150,6 +156,7 @@ def _nsa_result_to_item(r: NSAResult) -> ResultItem:
 # Routes — health
 # ---------------------------------------------------------------------------
 
+
 @app.get("/")
 def health_check():
     return {"status": "ok", "service": "EventSense AI"}
@@ -158,6 +165,7 @@ def health_check():
 # ---------------------------------------------------------------------------
 # Routes — auth
 # ---------------------------------------------------------------------------
+
 
 @app.post("/api/auth/register", response_model=AuthResponse, status_code=201)
 def register(body: RegisterRequest):
@@ -169,7 +177,7 @@ def register(body: RegisterRequest):
             role=body.role,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     token = create_access_token(user)
 
@@ -221,9 +229,11 @@ def me(current_user: dict = Depends(get_current_user)):
         role=user.role,
     )
 
+
 # ---------------------------------------------------------------------------
 # Routes — NSA analysis (protected)
 # ---------------------------------------------------------------------------
+
 
 @app.post("/api/nsa/analyse", response_model=AnalyseResponse)
 def analyse(
