@@ -22,7 +22,7 @@ from typing import Generator
 
 DATABASE_URL: str = os.getenv(
     "DATABASE_URL",
-    "postgresql://signal_admin:StrongPassword123@localhost:5432/signalcheck_ai",
+    "postgresql://eventsense_admin:YOUR_PASSWORD@localhost:5432/eventsense_ai",
 )
 
 # ---------------------------------------------------------------------------

@@ -1,5 +1,5 @@
 """
-auth.py — Authentication layer for SignalCheck AI
+auth.py — Authentication layer for EventSense AI
 ==================================================
 Provides:
   - Password hashing with bcrypt (stdlib PBKDF2 fallback)

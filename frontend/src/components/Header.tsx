@@ -149,7 +149,7 @@ transparent
           <Box
             component="img"
             src={logo}
-            alt="SignalCheck AI"
+            alt="EventSense AI"
             sx={{
               width: 30,
               height: 30,

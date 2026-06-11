@@ -32,7 +32,7 @@ from database import init_db
 # ---------------------------------------------------------------------------
 
 app = FastAPI(
-    title="SignalCheck AI",
+    title="EventSense AI",
     description="NSA anomaly detection with JWT authentication.",
     version="0.3.0",
 )
