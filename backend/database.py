@@ -1,36 +1,42 @@
 """
 database.py — PostgreSQL connection and schema management
 =========================================================
-Uses psycopg2 (synchronous) to keep the stack simple with FastAPI's
-default thread-pool execution model.
+Uses psycopg2 for PostgreSQL connection and schema creation.
 
-The DATABASE_URL is read from the environment variable of the same name,
-falling back to the local development value if not set.
+Database:
+    eventsense_ai
+
+Main tables:
+    users
+    datasets
+    feedback_records
+    preprocessing_log
+    nsa_detectors
+    anomaly_results
+    sentiment_results
+    reports
+    system_configuration
+    experiment_runs
 """
 
 from __future__ import annotations
 
 import os
-import psycopg2
-import psycopg2.extras
 from contextlib import contextmanager
 from typing import Generator
 
-# ---------------------------------------------------------------------------
-# Connection string
-# ---------------------------------------------------------------------------
+import psycopg2
+import psycopg2.extras
+
 
 DATABASE_URL: str = os.getenv(
     "DATABASE_URL",
-    "postgresql://eventsense_admin:YOUR_PASSWORD@localhost:5432/eventsense_ai",
+    "postgresql://eventsense_admin:StrongPassword123@localhost:5432/eventsense_ai",
 )
 
-# ---------------------------------------------------------------------------
-# Connection helper
-# ---------------------------------------------------------------------------
 
 def get_connection() -> psycopg2.extensions.connection:
-    """Open and return a new psycopg2 connection."""
+    """Open and return a new PostgreSQL connection."""
     return psycopg2.connect(DATABASE_URL)
 
 
@@ -39,13 +45,9 @@ def get_cursor(
     commit: bool = False,
 ) -> Generator[psycopg2.extras.RealDictCursor, None, None]:
     """
-    Context manager that yields a RealDictCursor.
+    Yield a RealDictCursor and optionally commit changes.
 
-    Usage:
-        with get_cursor(commit=True) as cur:
-            cur.execute("INSERT INTO ...")
-
-    Automatically commits if `commit=True` and rolls back on exception.
+    Automatically rolls back if an exception occurs.
     """
     conn = get_connection()
     try:
@@ -60,27 +62,196 @@ def get_cursor(
         conn.close()
 
 
-# ---------------------------------------------------------------------------
-# Schema initialisation
-# ---------------------------------------------------------------------------
-
 CREATE_USERS_TABLE = """
 CREATE TABLE IF NOT EXISTS users (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    full_name       TEXT        NOT NULL,
-    email           TEXT        NOT NULL UNIQUE,
-    role            TEXT        NOT NULL CHECK (role IN ('event_organiser', 'system_admin')),
-    hashed_password TEXT        NOT NULL,
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    user_id SERIAL PRIMARY KEY,
+    full_name VARCHAR(255) NOT NULL,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    role VARCHAR(50) NOT NULL CHECK (
+        role IN ('EVENT_ORGANISER', 'SYSTEM_ADMIN')
+    ),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+"""
+
+
+CREATE_DATASETS_TABLE = """
+CREATE TABLE IF NOT EXISTS datasets (
+    dataset_id SERIAL PRIMARY KEY,
+    source_name VARCHAR(255) NOT NULL,
+    source_type VARCHAR(50) CHECK (
+        source_type IN ('CSV', 'JSON', 'API')
+    ),
+    dataset_description TEXT,
+    file_path TEXT,
+    total_records INTEGER DEFAULT 0,
+    status VARCHAR(50) DEFAULT 'LOADED',
+    loaded_by INTEGER REFERENCES users(user_id),
+    loaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+"""
+
+
+CREATE_FEEDBACK_RECORDS_TABLE = """
+CREATE TABLE IF NOT EXISTS feedback_records (
+    feedback_id SERIAL PRIMARY KEY,
+    dataset_id INTEGER REFERENCES datasets(dataset_id) ON DELETE CASCADE,
+    raw_text TEXT NOT NULL,
+    cleaned_text TEXT,
+    tokens JSONB,
+    vector JSONB,
+    preprocessing_complete BOOLEAN DEFAULT FALSE,
+    is_valid BOOLEAN DEFAULT TRUE,
+    is_anomalous BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+"""
+
+
+CREATE_PREPROCESSING_LOG_TABLE = """
+CREATE TABLE IF NOT EXISTS preprocessing_log (
+    preprocessing_id SERIAL PRIMARY KEY,
+    feedback_id INTEGER REFERENCES feedback_records(feedback_id) ON DELETE CASCADE,
+    cleaning_applied BOOLEAN DEFAULT FALSE,
+    stop_words_removed BOOLEAN DEFAULT FALSE,
+    tokenization_complete BOOLEAN DEFAULT FALSE,
+    normalization_complete BOOLEAN DEFAULT FALSE,
+    preprocessing_duration_ms NUMERIC(10,2),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+"""
+
+
+CREATE_NSA_DETECTORS_TABLE = """
+CREATE TABLE IF NOT EXISTS nsa_detectors (
+    detector_id SERIAL PRIMARY KEY,
+    dataset_id INTEGER REFERENCES datasets(dataset_id) ON DELETE CASCADE,
+    detector_vector JSONB,
+    radius NUMERIC(10,4),
+    threshold NUMERIC(10,4),
+    detector_version VARCHAR(50),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+"""
+
+
+CREATE_ANOMALY_RESULTS_TABLE = """
+CREATE TABLE IF NOT EXISTS anomaly_results (
+    anomaly_id SERIAL PRIMARY KEY,
+    feedback_id INTEGER REFERENCES feedback_records(feedback_id) ON DELETE CASCADE,
+    detector_id INTEGER REFERENCES nsa_detectors(detector_id),
+    is_anomalous BOOLEAN NOT NULL,
+    anomaly_score NUMERIC(6,2),
+    anomaly_reason TEXT,
+    detection_time_ms NUMERIC(10,2),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+"""
+
+
+CREATE_SENTIMENT_RESULTS_TABLE = """
+CREATE TABLE IF NOT EXISTS sentiment_results (
+    sentiment_id SERIAL PRIMARY KEY,
+    feedback_id INTEGER REFERENCES feedback_records(feedback_id) ON DELETE CASCADE,
+    sentiment_label VARCHAR(50) CHECK (
+        sentiment_label IN ('POSITIVE', 'NEGATIVE', 'NEUTRAL')
+    ),
+    confidence_score NUMERIC(6,2),
+    model_name VARCHAR(100) DEFAULT 'DistilBERT',
+    inference_time_ms NUMERIC(10,2),
+    classified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+"""
+
+
+CREATE_REPORTS_TABLE = """
+CREATE TABLE IF NOT EXISTS reports (
+    report_id SERIAL PRIMARY KEY,
+    dataset_id INTEGER REFERENCES datasets(dataset_id),
+    generated_by INTEGER REFERENCES users(user_id),
+    report_title VARCHAR(255),
+    report_summary TEXT,
+    total_feedback INTEGER,
+    suspicious_feedback INTEGER,
+    valid_feedback INTEGER,
+    positive_count INTEGER,
+    negative_count INTEGER,
+    neutral_count INTEGER,
+    generated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+"""
+
+
+CREATE_SYSTEM_CONFIGURATION_TABLE = """
+CREATE TABLE IF NOT EXISTS system_configuration (
+    config_id SERIAL PRIMARY KEY,
+    nsa_threshold NUMERIC(10,4),
+    detector_count INTEGER,
+    sentiment_model VARCHAR(100),
+    updated_by INTEGER REFERENCES users(user_id),
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+"""
+
+
+CREATE_EXPERIMENT_RUNS_TABLE = """
+CREATE TABLE IF NOT EXISTS experiment_runs (
+    experiment_id SERIAL PRIMARY KEY,
+    dataset_id INTEGER REFERENCES datasets(dataset_id),
+    experiment_name VARCHAR(255),
+    accuracy NUMERIC(6,2),
+    precision_score NUMERIC(6,2),
+    recall_score NUMERIC(6,2),
+    f1_score NUMERIC(6,2),
+    roc_auc NUMERIC(6,2),
+    detection_rate NUMERIC(6,2),
+    false_alarm_rate NUMERIC(6,2),
+    execution_time_seconds NUMERIC(10,2),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+"""
+
+
+CREATE_INDEXES = """
+CREATE INDEX IF NOT EXISTS idx_feedback_dataset
+ON feedback_records(dataset_id);
+
+CREATE INDEX IF NOT EXISTS idx_anomaly_feedback
+ON anomaly_results(feedback_id);
+
+CREATE INDEX IF NOT EXISTS idx_sentiment_feedback
+ON sentiment_results(feedback_id);
+
+CREATE INDEX IF NOT EXISTS idx_detector_dataset
+ON nsa_detectors(dataset_id);
+
+CREATE INDEX IF NOT EXISTS idx_report_dataset
+ON reports(dataset_id);
 """
 
 
 def init_db() -> None:
     """
-    Create the database schema if it does not already exist.
+    Create the full EventSense AI database schema if it does not already exist.
     Called once at application startup from main.py.
     """
+    statements = [
+        CREATE_USERS_TABLE,
+        CREATE_DATASETS_TABLE,
+        CREATE_FEEDBACK_RECORDS_TABLE,
+        CREATE_PREPROCESSING_LOG_TABLE,
+        CREATE_NSA_DETECTORS_TABLE,
+        CREATE_ANOMALY_RESULTS_TABLE,
+        CREATE_SENTIMENT_RESULTS_TABLE,
+        CREATE_REPORTS_TABLE,
+        CREATE_SYSTEM_CONFIGURATION_TABLE,
+        CREATE_EXPERIMENT_RUNS_TABLE,
+        CREATE_INDEXES,
+    ]
+
     with get_cursor(commit=True) as cur:
-        cur.execute(CREATE_USERS_TABLE)
-    print("[db] Schema initialised.")
+        for statement in statements:
+            cur.execute(statement)
+
+    print("[db] EventSense AI schema initialised.")

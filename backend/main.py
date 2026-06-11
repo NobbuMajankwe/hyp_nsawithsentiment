@@ -85,7 +85,7 @@ class RegisterRequest(BaseModel):
     fullName: str
     email: str
     password: str
-    role: Literal["event_organiser", "system_admin"]
+    role: Literal["EVENT_ORGANISER", "SYSTEM_ADMIN"]
 
 
 class LoginRequest(BaseModel):
@@ -93,16 +93,16 @@ class LoginRequest(BaseModel):
     password: str
 
 
-class AuthResponse(BaseModel):
-    token: str
-    user: "UserOut"
-
-
 class UserOut(BaseModel):
-    id: str
+    id: int
     fullName: str
     email: str
     role: str
+
+
+class AuthResponse(BaseModel):
+    token: str
+    user: UserOut
 
 
 # ---------------------------------------------------------------------------
@@ -161,10 +161,6 @@ def health_check():
 
 @app.post("/api/auth/register", response_model=AuthResponse, status_code=201)
 def register(body: RegisterRequest):
-    """
-    Register a new event organiser or system administrator account.
-    Returns a JWT on success.
-    """
     try:
         user = create_user(
             full_name=body.fullName,
@@ -176,43 +172,54 @@ def register(body: RegisterRequest):
         raise HTTPException(status_code=422, detail=str(exc))
 
     token = create_access_token(user)
+
     return AuthResponse(
         token=token,
-        user=UserOut(id=user.id, fullName=user.full_name, email=user.email, role=user.role),
+        user=UserOut(
+            id=user.user_id,
+            fullName=user.full_name,
+            email=user.email,
+            role=user.role,
+        ),
     )
 
 
 @app.post("/api/auth/login", response_model=AuthResponse)
 def login(body: LoginRequest):
-    """
-    Authenticate with email + password. Returns a JWT on success.
-    """
     user = authenticate_user(body.email, body.password)
+
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password.",
         )
+
     token = create_access_token(user)
+
     return AuthResponse(
         token=token,
-        user=UserOut(id=user.id, fullName=user.full_name, email=user.email, role=user.role),
+        user=UserOut(
+            id=user.user_id,
+            fullName=user.full_name,
+            email=user.email,
+            role=user.role,
+        ),
     )
 
 
 @app.get("/api/auth/me", response_model=UserOut)
 def me(current_user: dict = Depends(get_current_user)):
-    """Return the profile of the currently authenticated user."""
     user = get_user_by_id(current_user["sub"])
+
     if not user:
         raise HTTPException(status_code=404, detail="User not found.")
+
     return UserOut(
-        id=user.id,
+        id=user.user_id,
         fullName=user.full_name,
         email=user.email,
         role=user.role,
     )
-
 
 # ---------------------------------------------------------------------------
 # Routes — NSA analysis (protected)

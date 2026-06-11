@@ -90,8 +90,8 @@ export function Header({ currentPage, onNavigate, expanded, onToggle }: Props) {
       .toUpperCase()
       .slice(0, 2) ?? "?";
   const roleLabel =
-    user?.role === "system_admin" ? "System Admin" : "Event Organiser";
-  const roleColor = user?.role === "system_admin" ? "#7c3aed" : "#0891b2";
+    user?.role === "SYSTEM_ADMIN" ? "System Admin" : "Event Organiser";
+  const roleColor = user?.role === "SYSTEM_ADMIN" ? "#7c3aed" : "#0891b2";
   const navWidth = expanded ? SIDENAV_WIDTH : SIDENAV_COLLAPSED_WIDTH;
 
   return (

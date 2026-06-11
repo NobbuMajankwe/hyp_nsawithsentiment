@@ -41,7 +41,7 @@ export async function apiRegister(payload: {
   fullName: string;
   email: string;
   password: string;
-  role: 'event_organiser' | 'system_admin';
+  role: 'EVENT_ORGANISER' | 'SYSTEM_ADMIN';
 }): Promise<AuthResponse> {
   const { data } = await apiClient.post<AuthResponse>('/api/auth/register', payload);
   return data;

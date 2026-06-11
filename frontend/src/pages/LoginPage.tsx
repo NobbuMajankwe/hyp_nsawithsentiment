@@ -151,7 +151,7 @@ export function RegisterPage({ onSwitchToLogin }: RegisterProps) {
     email: "",
     password: "",
     confirmPassword: "",
-    role: "event_organiser" as "event_organiser" | "system_admin",
+    role: "EVENT_ORGANISER" as "EVENT_ORGANISER" | "SYSTEM_ADMIN",
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -250,8 +250,8 @@ export function RegisterPage({ onSwitchToLogin }: RegisterProps) {
             <Stack direction="row" spacing={1.5}>
               {(
                 [
-                  { value: "event_organiser", label: "Event Organiser" },
-                  { value: "system_admin", label: "System Admin" },
+                  { value: "EVENT_ORGANISER", label: "Event Organiser" },
+                  { value: "SYSTEM_ADMIN", label: "System Admin" },
                 ] as const
               ).map((opt) => (
                 <Box
