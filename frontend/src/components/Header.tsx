@@ -290,14 +290,16 @@ transparent
           </Box>
           <Divider />
           <MenuItem
-            disabled
+            
+            onClick={() => onNavigate("profile")}
             sx={{ gap: 1.5, py: 1.25, color: "text.secondary" }}
           >
             <ListItemIcon sx={{ minWidth: "unset" }}>
               <User size={16} />
             </ListItemIcon>
-            Profile (coming soon)
+            Profile
           </MenuItem>
+         
           <Divider />
           <MenuItem
             onClick={() => {

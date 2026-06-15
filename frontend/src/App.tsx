@@ -16,8 +16,9 @@ import { buildSteps } from './data/pipelineSteps';
 import { runNsaAnalysis, type AnalyseResponse } from './services/api';
 import { useAuth } from './context/AuthContext';
 import type { AnalysisResult } from './types';
+import ProfilePage from './pages/ProfilePage';
 
-export type Page = 'nsa' | 'sentiment' | 'insight';
+export type Page = 'profile' | 'nsa' | 'sentiment' | 'insight';
 
 // ---------------------------------------------------------------------------
 // Root — auth gate
@@ -66,7 +67,8 @@ function Dashboard() {
           minHeight: `calc(100vh - ${HEADER_HEIGHT}px)`,
         }}
       >
-        {page === 'nsa'       && <NsaPage />}
+        {page === 'profile'       && <ProfilePage />}
+         {page === 'nsa'       && <NsaPage />}
         {page === 'sentiment' && <SentimentPage />}
         {page === 'insight'   && <InsightStoryPage />}
       </Box>
