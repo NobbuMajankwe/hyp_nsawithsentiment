@@ -52,6 +52,14 @@ export async function apiLogin(email: string, password: string): Promise<AuthRes
   return data;
 }
 
+export async function apiResetPassword(email: string, newPassword: string) {
+  const response = await apiClient.post('/api/auth/reset-password', {
+    email,
+    newPassword,
+  });
+
+  return response.data;
+}
 // ---------------------------------------------------------------------------
 // NSA analysis (requires token)
 // ---------------------------------------------------------------------------

@@ -248,3 +248,38 @@ def authenticate_user(email: str, password: str) -> Optional[UserRecord]:
         return None
 
     return user
+
+def reset_user_password(email: str, new_password: str) -> bool:
+    """
+    Reset a user's password using their registered email address.
+
+    Prototype note:
+    In a production system, this should use an emailed reset token.
+    For this prototype, the function directly resets the password after
+    validating the email and new password.
+    """
+    email = email.strip().lower()
+
+    user = get_user_by_email(email)
+
+    if not user:
+        return False
+
+    _validate_password_strength(new_password)
+
+    new_password_hash = hash_password(new_password)
+
+    with get_cursor(commit=True) as cur:
+        cur.execute(
+            """
+            UPDATE users
+            SET password_hash = %s
+            WHERE user_id = %s
+            """,
+            (
+                new_password_hash,
+                user.user_id,
+            ),
+        )
+
+    return True

@@ -6,7 +6,7 @@ import { InputPanel } from './components/InputPanel';
 import { FeedbackCanvas } from './components/FeedbackCanvas';
 import { FindingsPanel } from './components/FindingsPanel';
 import { AnalyticsCharts } from './components/AnalyticsCharts';
-import { LoginPage, RegisterPage } from './pages/LoginPage';
+import { LoginPage, RegisterPage, ResetPasswordPage } from './pages/LoginPage';
 import { SentimentPage } from './pages/SentimentPage';
 import { InsightStoryPage } from './pages/InsightStoryPage';
 import { PipelineTracker } from './components/PipelineTracker';
@@ -17,6 +17,7 @@ import { runNsaAnalysis, type AnalyseResponse } from './services/api';
 import { useAuth } from './context/AuthContext';
 import type { AnalysisResult } from './types';
 import ProfilePage from './pages/ProfilePage';
+//import ResetPasswordPage from './pages/ResetPasswordPage';
 
 export type Page = 'profile' | 'nsa' | 'sentiment' | 'insight';
 
@@ -26,15 +27,42 @@ export type Page = 'profile' | 'nsa' | 'sentiment' | 'insight';
 
 export default function App() {
   const { isAuthenticated } = useAuth();
-  const [authView, setAuthView] = useState<'login' | 'register'>('login');
+  const [authView, setAuthView] = useState<'login' | 'reset' | 'register'>('login');
 
   if (!isAuthenticated) {
-    return authView === 'login' ? (
-      <LoginPage onSwitchToRegister={() => setAuthView('register')} />
-    ) : (
-      <RegisterPage onSwitchToLogin={() => setAuthView('login')} />
-    );
+  switch (authView) {
+    case 'register':
+      return (
+        <RegisterPage
+          onSwitchToLogin={() =>
+            setAuthView('login')
+          }
+        />
+      );
+
+    case 'reset':
+      return (
+        <ResetPasswordPage
+          onBackToLogin={() =>
+            setAuthView('login')
+          }
+        />
+      );
+
+    case 'login':
+    default:
+      return (
+        <LoginPage
+          onSwitchToRegister={() =>
+            setAuthView('register')
+          }
+          onSwitchToReset={() =>
+            setAuthView('reset')
+          }
+        />
+      );
   }
+}
 
   return <Dashboard />;
 }

@@ -11,14 +11,14 @@ import {
 } from "@mui/material";
 import { LogIn } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
-import { apiLogin, apiRegister } from "../services/api";
+import { apiLogin, apiRegister, apiResetPassword } from "../services/api";
 import logo from "../assets/logo.png";
-
 interface Props {
   onSwitchToRegister: () => void;
+  onSwitchToReset: () => void;
 }
 
-export function LoginPage({ onSwitchToRegister }: Props) {
+export function LoginPage({ onSwitchToRegister, onSwitchToReset }: Props) {
   const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -109,12 +109,30 @@ export function LoginPage({ onSwitchToRegister }: Props) {
               "&:hover": { opacity: 0.92 }, */
               /* background: 'linear-gradient(135deg, #4f46e5, #7c3aed, #db2777)', */
               background:
-          "radial-gradient(circle at top left, rgba(124,58,237,0.45), transparent 35%), linear-gradient(135deg, #050816 0%, #111827 45%, #312e81 100%)",
-boxShadow: '0 12px 28px rgba(124,58,237,0.45)',
+                "radial-gradient(circle at top left, rgba(124,58,237,0.45), transparent 35%), linear-gradient(135deg, #050816 0%, #111827 45%, #312e81 100%)",
+              boxShadow: "0 12px 28px rgba(124,58,237,0.45)",
             }}
           >
             {loading ? "Signing in…" : "Sign in"}
           </Button>
+          <Box
+            sx={{
+              mt: 2,
+              textAlign: "center",
+            }}
+          >
+            <Typography
+              variant="body2"
+              sx={{
+                cursor: "pointer",
+                color: "primary.main",
+                fontWeight: 700,
+              }}
+              onClick={onSwitchToReset}
+            >
+              Forgot password?
+            </Typography>
+          </Box>
         </Stack>
       </Box>
 
@@ -339,8 +357,8 @@ export function RegisterPage({ onSwitchToLogin }: RegisterProps) {
               "&:hover": { opacity: 0.92 }, */
               /* background: 'linear-gradient(135deg, #4f46e5, #7c3aed, #db2777)', */
               background:
-          "radial-gradient(circle at top left, rgba(124,58,237,0.45), transparent 35%), linear-gradient(135deg, #050816 0%, #111827 45%, #312e81 100%)",
-boxShadow: '0 12px 28px rgba(124,58,237,0.45)',
+                "radial-gradient(circle at top left, rgba(124,58,237,0.45), transparent 35%), linear-gradient(135deg, #050816 0%, #111827 45%, #312e81 100%)",
+              boxShadow: "0 12px 28px rgba(124,58,237,0.45)",
             }}
           >
             {loading ? "Creating account…" : "Create account"}
@@ -366,6 +384,170 @@ boxShadow: '0 12px 28px rgba(124,58,237,0.45)',
   );
 }
 
+// ---------------------------------------------------------------------------
+// ResetPassword page
+// ---------------------------------------------------------------------------
+
+interface ResetPasswordProps {
+  onBackToLogin: () => void;
+}
+
+export function ResetPasswordPage({ onBackToLogin }: ResetPasswordProps) {
+  const [email, setEmail] = useState("");
+
+  const [newPassword, setNewPassword] = useState("");
+
+  const [loading, setLoading] = useState(false);
+
+  const [success, setSuccess] = useState<string | null>(null);
+
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+
+    setError(null);
+    setSuccess(null);
+
+    setLoading(true);
+
+    try {
+      const res = await apiResetPassword(email, newPassword);
+
+      setSuccess(res.message ?? "Password reset successfully.");
+
+      setEmail("");
+      setNewPassword("");
+    } catch (err) {
+      setError(axios_detail(err) ?? "Unable to reset password.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <AuthLayout>
+      <Typography
+        variant="h5"
+        sx={{
+          fontWeight: 800,
+          mb: 1,
+        }}
+      >
+        Reset Password
+      </Typography>
+
+      <Typography
+        variant="body2"
+        color="text.secondary"
+        sx={{
+          mb: 3,
+        }}
+      >
+        Recover access to your EventSense AI account
+      </Typography>
+
+      {success && (
+        <Alert
+          severity="success"
+          sx={{
+            mb: 2,
+            borderRadius: 2,
+          }}
+        >
+          {success}
+        </Alert>
+      )}
+
+      {error && (
+        <Alert
+          severity="error"
+          sx={{
+            mb: 2,
+            borderRadius: 2,
+          }}
+        >
+          {error}
+        </Alert>
+      )}
+
+      <Box component="form" onSubmit={handleSubmit}>
+        <Stack spacing={2}>
+          <TextField
+            label="Email"
+            type="email"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            sx={{
+              "& .MuiOutlinedInput-root": {
+                borderRadius: 3,
+                bgcolor: "#f8fafc",
+              },
+            }}
+          />
+
+          <TextField
+            label="New Password"
+            type="password"
+            required
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            helperText="8+ chars, uppercase, lowercase and number"
+            sx={{
+              "& .MuiOutlinedInput-root": {
+                borderRadius: 3,
+                bgcolor: "#f8fafc",
+              },
+            }}
+          />
+
+          <Button
+            type="submit"
+            variant="contained"
+            fullWidth
+            disabled={loading}
+            sx={{
+              py: 1.4,
+
+              borderRadius: 999,
+
+              background:
+                "radial-gradient(circle at top left, rgba(124,58,237,0.45), transparent 35%), linear-gradient(135deg,#050816 0%,#111827 45%,#312e81 100%)",
+
+              boxShadow: "0 12px 28px rgba(124,58,237,0.45)",
+            }}
+          >
+            {loading ? "Resetting..." : "Reset Password"}
+          </Button>
+        </Stack>
+      </Box>
+
+      <Typography
+        variant="body2"
+        sx={{
+          mt: 3,
+          textAlign: "center",
+        }}
+      >
+        Remembered password?{" "}
+        <Box
+          component="span"
+          onClick={onBackToLogin}
+          sx={{
+            color: "primary.main",
+
+            cursor: "pointer",
+
+            fontWeight: 700,
+          }}
+        >
+          Sign in
+        </Box>
+      </Typography>
+    </AuthLayout>
+  );
+}
 // ---------------------------------------------------------------------------
 // Shared layout wrapper
 // ---------------------------------------------------------------------------

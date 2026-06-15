@@ -16,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 from typing import List, Literal, Optional
-
+from auth import reset_user_password
 from nsa import get_nsa, NSAResult
 from auth import (
     authenticate_user,
@@ -108,7 +108,9 @@ class AuthResponse(BaseModel):
     token: str
     user: UserOut
 
-
+class ResetPasswordRequest(BaseModel):
+    email: str
+    newPassword: str
 # ---------------------------------------------------------------------------
 # NSA schemas
 # ---------------------------------------------------------------------------
@@ -229,6 +231,25 @@ def me(current_user: dict = Depends(get_current_user)):
         role=user.role,
     )
 
+@app.post("/api/auth/reset-password")
+def reset_password(body: ResetPasswordRequest):
+    try:
+        success = reset_user_password(
+            email=body.email,
+            new_password=body.newPassword,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    if not success:
+        raise HTTPException(
+            status_code=404,
+            detail="No account found with this email address.",
+        )
+
+    return {
+        "message": "Password reset successfully. You can now log in with your new password."
+    }
 
 # ---------------------------------------------------------------------------
 # Routes — NSA analysis (protected)
