@@ -6,20 +6,13 @@ import {
   useMemo,
   useState,
   type ReactNode,
-} from 'react';
+} from "react";
 
-import { attachAuthInterceptor } from '../services/api';
+import { attachAuthInterceptor } from "../services/api";
 
-import {
-  TOKEN_KEY,
-  USER_KEY,
-  loadAuthState,
-} from '../utils/authStorage';
+import { TOKEN_KEY, USER_KEY, loadAuthState } from "../utils/authStorage";
 
-import type {
-  AuthState,
-  AuthUser,
-} from '../types/auth';
+import type { AuthState, AuthUser } from "../types/auth";
 
 interface AuthContextValue extends AuthState {
   login: (token: string, user: AuthUser) => void;
@@ -27,52 +20,26 @@ interface AuthContextValue extends AuthState {
   isAuthenticated: boolean;
 }
 
-const AuthContext =
-  createContext<AuthContextValue | undefined>(
-    undefined,
-  );
+const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-export function AuthProvider({
-  children,
-}: {
-  children: ReactNode;
-}) {
-  const [state, setState] =
-    useState<AuthState>(
-      loadAuthState,
-    );
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [state, setState] = useState<AuthState>(loadAuthState);
 
-  const login = useCallback(
-    (
-      token: string,
-      user: AuthUser,
-    ) => {
-      localStorage.setItem(
-        TOKEN_KEY,
-        token,
-      );
+  const login = useCallback((token: string, user: AuthUser) => {
+    localStorage.setItem(TOKEN_KEY, token);
 
-      localStorage.setItem(
-        USER_KEY,
-        JSON.stringify(user),
-      );
+    localStorage.setItem(USER_KEY, JSON.stringify(user));
 
-      setState({
-        token,
-        user,
-      });
-    },
-    [],
-  );
+    setState({
+      token,
+      user,
+    });
+  }, []);
 
   const logout = useCallback(() => {
-    localStorage.removeItem(
-      TOKEN_KEY,
-    );
+    localStorage.removeItem(TOKEN_KEY);
 
-    localStorage.removeItem(
-      USER_KEY,
-    );
+    localStorage.removeItem(USER_KEY);
 
     setState({
       token: null,
@@ -81,49 +48,28 @@ export function AuthProvider({
   }, []);
 
   useEffect(() => {
-    attachAuthInterceptor(
-      logout,
-    );
+    attachAuthInterceptor(logout);
   }, [logout]);
 
-  const value =
-    useMemo(
-      () => ({
-        ...state,
-        login,
-        logout,
-        isAuthenticated:
-          Boolean(
-            state.token,
-          ),
-      }),
-      [
-        state,
-        login,
-        logout,
-      ],
-    );
-
-  return (
-    <AuthContext.Provider
-      value={value}
-    >
-      {children}
-    </AuthContext.Provider>
+  const value = useMemo(
+    () => ({
+      ...state,
+      login,
+      logout,
+      isAuthenticated: Boolean(state.token),
+    }),
+    [state, login, logout],
   );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 // eslint-disable-next-line react-refresh/only-export-components
 export function useAuth() {
-  const ctx =
-    useContext(
-      AuthContext,
-    );
+  const ctx = useContext(AuthContext);
 
   if (!ctx) {
-    throw new Error(
-      'useAuth must be used inside AuthProvider',
-    );
+    throw new Error("useAuth must be used inside AuthProvider");
   }
 
   return ctx;
