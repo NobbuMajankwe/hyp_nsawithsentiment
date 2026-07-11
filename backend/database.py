@@ -230,6 +230,40 @@ CREATE INDEX IF NOT EXISTS idx_report_dataset
 ON reports(dataset_id);
 """
 
+# ---------------------------------------------------------------------------
+# NSA analysis session caching
+# ---------------------------------------------------------------------------
+
+CREATE_NSA_SESSIONS_TABLE = """
+CREATE TABLE IF NOT EXISTS nsa_sessions (
+    session_id   SERIAL PRIMARY KEY,
+    user_id      INTEGER REFERENCES users(user_id),
+    input_hash   TEXT NOT NULL,
+    total_records     INTEGER NOT NULL,
+    valid_records     INTEGER NOT NULL,
+    suspicious_records INTEGER NOT NULL,
+    created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_nsa_sessions_user_hash
+ON nsa_sessions(user_id, input_hash);
+"""
+
+CREATE_NSA_SESSION_RESULTS_TABLE = """
+CREATE TABLE IF NOT EXISTS nsa_session_results (
+    result_id      SERIAL PRIMARY KEY,
+    session_id     INTEGER REFERENCES nsa_sessions(session_id) ON DELETE CASCADE,
+    record_index   INTEGER NOT NULL,
+    original_text  TEXT NOT NULL,
+    cleaned_text   TEXT NOT NULL,
+    tokens         JSONB NOT NULL,
+    nsa_status     TEXT NOT NULL,
+    anomaly_score  INTEGER NOT NULL,
+    anomaly_reason TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_nsa_session_results_session
+ON nsa_session_results(session_id);
+"""
+
 
 def init_db() -> None:
     """
@@ -248,6 +282,8 @@ def init_db() -> None:
         CREATE_SYSTEM_CONFIGURATION_TABLE,
         CREATE_EXPERIMENT_RUNS_TABLE,
         CREATE_INDEXES,
+        CREATE_NSA_SESSIONS_TABLE,
+        CREATE_NSA_SESSION_RESULTS_TABLE,
     ]
 
     with get_cursor(commit=True) as cur:

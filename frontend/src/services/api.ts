@@ -70,6 +70,7 @@ export interface AnalyseResponse {
   validRecords: number;
   suspiciousRecords: number;
   results: AnalysisResult[];
+  cached: boolean;
 }
 
 export async function runNsaAnalysis(
