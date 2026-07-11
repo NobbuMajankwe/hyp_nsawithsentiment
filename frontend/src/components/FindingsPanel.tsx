@@ -16,8 +16,6 @@ export function FindingsPanel({ summary, results }: Props) {
   const valid = summary?.validRecords ?? total - suspicious;
 
   const topAnomaly = results.find((r) => r.nsaStatus === "Suspicious");
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const isCached = summary?.cached === true;
 
   return (
     <Paper
