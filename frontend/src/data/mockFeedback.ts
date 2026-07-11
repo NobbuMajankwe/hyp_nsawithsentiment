@@ -1,5 +1,4 @@
 // Default sample feedback pre-loaded into the textarea.
-// These are the eight samples specified for Deliverable 04.
 
 export const SAMPLE_FEEDBACK: string[] = [
   "The event was well organised and the speakers were informative.",

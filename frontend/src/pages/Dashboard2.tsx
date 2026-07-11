@@ -88,7 +88,7 @@ const PIPELINE_STAGES = [
   {
     num: '03',
     label: 'Sentiment Analysis',
-    status: 'Coming in Part 2',
+    status: 'Coming soon',
     statusColor: '#f59e0b',
     statusBg: 'rgba(245,158,11,0.10)',
     borderColor: 'rgba(245,158,11,0.30)',
@@ -98,7 +98,7 @@ const PIPELINE_STAGES = [
   {
     num: '04',
     label: 'Insight Story',
-    status: 'Coming in Part 3',
+    status: 'Coming soon',
     statusColor: '#94a3b8',
     statusBg: 'rgba(148,163,184,0.10)',
     borderColor: 'rgba(148,163,184,0.25)',
@@ -196,7 +196,7 @@ export default function Dashboard2() {
         bgcolor: '#020617',
         color: '#e5e7eb',
         pb: 6,
-
+//display:'none',
         backgroundImage: `
           radial-gradient(
             circle at 15% 10%,
@@ -308,18 +308,7 @@ export default function Dashboard2() {
               }}
             />
 
-            <Chip
-              label="$ deliverable_04 --prototype"
-              size="small"
-              sx={{
-                bgcolor: 'rgba(148,163,184,0.08)',
-                color: '#94a3b8',
-                border:
-                  '1px solid rgba(148,163,184,0.18)',
-                fontWeight: 700,
-                fontFamily: 'monospace',
-              }}
-            />
+          
           </Stack>
 
           <Typography

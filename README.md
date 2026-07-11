@@ -1,5 +1,4 @@
 # EventSense AI — Hybrid Sentiment Analysis & NSA Feedback Filter
-## Deliverable 04 · Part 1: Negative Selection Algorithm Module
 
 > Suspicious feedback is blocked by the NSA engine **before** it ever reaches sentiment analysis.
 

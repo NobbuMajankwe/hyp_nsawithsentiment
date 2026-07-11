@@ -32,6 +32,7 @@ import { useAuth } from "./context/AuthContext";
 import type { AnalysisResult } from "./types";
 import ProfilePage from "./pages/ProfilePage";
 import Dashboard2 from "./pages/Dashboard2";
+import { Activity, ShieldCheck } from "lucide-react";
 //import ResetPasswordPage from './pages/ResetPasswordPage';
 
 export type Page =
@@ -72,7 +73,9 @@ export default function App() {
     }
   }
 
-  return <Dashboard />;
+  return <Box sx={{maxHeight: "90vh", bgcolor: "rgba(99,102,241,0.15)", mr: -1, my: -1 }}>
+    <Dashboard />;
+  </Box>
 }
 
 // ---------------------------------------------------------------------------
@@ -153,157 +156,187 @@ function NsaPage() {
   }
 
   return (
-    <Box
-      sx={{
-        minHeight: `calc(100vh - ${HEADER_HEIGHT}px)`,
-        py: { xs: 3, md: 6 },
-        background:'transparent'
-      }} 
-    >
-      <Container maxWidth="xl">
-        {/* Creative intro section */}
-        <Box
+     <Box sx={{ py: 4 }}>
+      <Container maxWidth={false} sx={{ maxWidth: 1600 }}>
+        {/* ── NSA Hero ── */}
+        <Paper
+          elevation={0}
           sx={{
-            display: "none",
-            gridTemplateColumns: { xs: "1fr", lg: "1.1fr 0.9fr" },
-            gap: 4,
-            alignItems: "center",
-            mb: 5,
+            position: "relative",
+            p: { xs: 3, md: 5 },
+            mb: 4,
+            borderRadius: 4,
+            bgcolor: "#050816",
+            color: "#e5e7eb",
+            overflow: "hidden",
+            border: "1px solid rgba(34,211,238,0.25)",
+            boxShadow: "0 0 45px rgba(34,211,238,0.1)",
+            backgroundImage: `
+      radial-gradient(
+        circle at top right,
+        rgba(34,211,238,0.18),
+        transparent 32%
+      ),
+      linear-gradient(
+        135deg,
+        #050816 0%,
+        #020617 55%,
+        #111827 100%
+      )
+    `,
           }}
         >
-          <Box>
-            <Chip
-              label="Negative Selection Prototype"
-              sx={{
-                mb: 2,
-                bgcolor: "#111827",
-                color: "#fff",
-                fontWeight: 700,
-                borderRadius: 999,
-              }}
-            />
+          {/* Grid overlay */}
+          <Box
+            sx={{
+              position: "absolute",
+              inset: 0,
+              opacity: 0.14,
+              backgroundImage:
+                "linear-gradient(rgba(34,211,238,0.14) 1px, transparent 1px), linear-gradient(90deg, rgba(34,211,238,0.14) 1px, transparent 1px)",
+              backgroundSize: "30px 30px",
+              pointerEvents: "none",
+            }}
+          />
 
-            <Typography
+          <Box sx={{ position: "relative", zIndex: 1 }}>
+            <Stack
+              direction="row"
+              spacing={2}
               sx={{
-                fontSize: { xs: "2.4rem", md: "4rem" },
-                fontWeight: 950,
-                lineHeight: 0.95,
-                letterSpacing: "-0.06em",
-                color: "#111827",
-                maxWidth: 760,
+                alignItems: "center",
+                mb: 3,
               }}
             >
-              Let the AI inspect your feedback before sentiment analysis begins.
-            </Typography>
+              <Box
+                sx={{
+                  width: 56,
+                  height: 56,
+                  borderRadius: 3,
+                  bgcolor: "#020617",
+                  border: "1px solid rgba(34,211,238,0.45)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  boxShadow: "0 0 22px rgba(34,211,238,0.28)",
+                }}
+              >
+                <ShieldCheck size={28} color="#22d3ee" />
+              </Box>
+
+              <Box>
+                <Chip
+                  label="$ nsa_engine --active"
+                  size="small"
+                  icon={<Activity size={11} />}
+                  sx={{
+                    mb: 1,
+                    bgcolor: "rgba(34,211,238,0.12)",
+                    color: "#67e8f9",
+                    border: "1px solid rgba(34,211,238,0.35)",
+                    fontWeight: 800,
+                    fontFamily: "monospace",
+
+                    "& .MuiChip-icon": {
+                      color: "#22d3ee",
+                    },
+                  }}
+                />
+
+                <Typography
+                  variant="h3"
+                  sx={{
+                    fontWeight: 900,
+                    lineHeight: 1,
+                    color: "#f8fafc",
+                    fontFamily: "monospace",
+                    fontSize: { xs: "2rem", md: "3rem" },
+                  }}
+                >
+                  &gt; NSA_Feedback_Filter
+                  <span style={{ color: "#22d3ee" }}>.</span>
+                </Typography>
+              </Box>
+            </Stack>
 
             <Typography
+              variant="h6"
               sx={{
-                mt: 3,
-                maxWidth: 680,
-                fontSize: "1.05rem",
-                color: "#6b7280",
+                maxWidth: 780,
+                color: "#94a3b8",
+                fontWeight: 400,
                 lineHeight: 1.8,
+                fontFamily: "monospace",
               }}
             >
-              This prototype uses a Negative Selection Algorithm to separate
-              normal feedback from suspicious or noisy records, then prepares
-              the clean data for the next stage of analysis.
+              The Negative Selection Algorithm preprocesses feedback records,
+              identifies anomalous or suspicious input, and allows only valid
+              records to continue into the sentiment-analysis pipeline.
             </Typography>
 
             <Stack
-              direction="row"
-              spacing={1}
-              sx={{ mt: 3, flexWrap: "wrap", gap: 1 }}
+              direction={{ xs: "column", sm: "row" }}
+              spacing={1.5}
+              sx={{
+                mt: 3,
+                flexWrap: "wrap",
+              }}
             >
               {[
-                "Load feedback",
-                "Detect anomalies",
-                "Protect sentiment flow",
-              ].map((item) => (
+                "load_feedback_records()",
+                "preprocess_input()",
+                "detect_anomalies()",
+                "queue_valid_records()",
+              ].map((step) => (
                 <Chip
-                  key={item}
-                  label={item}
+                  key={step}
+                  label={step}
+                  size="small"
                   sx={{
-                    bgcolor: "#fff",
-                    border: "1px solid #e5e7eb",
+                    bgcolor: "#020617",
+                    color: "#cffafe",
+                    border: "1px solid rgba(34,211,238,0.28)",
+                    fontFamily: "monospace",
                     fontWeight: 700,
                   }}
                 />
               ))}
             </Stack>
-          </Box>
 
-          {/* Visual story card instead of dashboard banner */}
-          <Paper
-            elevation={0}
-            sx={{
-              p: 3,
-              borderRadius: 6,
-              bgcolor: "#111827",
-              color: "#fff",
-              position: "relative",
-              overflow: "hidden",
-              minHeight: 300,
-              boxShadow: "0 30px 80px rgba(17,24,39,0.22)",
-            }}
-          >
-            <Box
+            <Stack
+              direction={{ xs: "column", sm: "row" }}
+              spacing={2}
               sx={{
-                position: "absolute",
-                width: 220,
-                height: 220,
-                borderRadius: "50%",
-                bgcolor: "rgba(99,102,241,0.35)",
-                top: -70,
-                right: -60,
-                filter: "blur(8px)",
+                mt: 4,
+                alignItems: { xs: "flex-start", sm: "center" },
               }}
-            />
-
-            <Box sx={{ position: "relative", zIndex: 1 }}>
-              <Typography sx={{ fontWeight: 800, mb: 3 }}>
-                Feedback Journey
+            >
+              <Typography
+                sx={{
+                  color: "rgba(148,163,184,0.55)",
+                  fontSize: ".78rem",
+                  fontFamily: "monospace",
+                }}
+              >
+                STATUS → NSA engine online and ready for dataset input
               </Typography>
 
-              {[
-                ["01", "Raw comments arrive"],
-                ["02", "NSA scans for abnormal patterns"],
-                ["03", "Clean feedback continues to sentiment"],
-                ["04", "Insights become a readable story"],
-              ].map(([num, text]) => (
-                <Stack
-                  key={num}
-                  direction="row"
-                  spacing={2}
-                  sx={{
-                    p: 1.5,
-                    mb: 1.5,
-                    borderRadius: 3,
-                    bgcolor: "rgba(255,255,255,0.08)",
-                    border: "1px solid rgba(255,255,255,0.1)",
-                    alignItems: "center",
-                  }}
-                >
-                  <Box
-                    sx={{
-                      width: 38,
-                      height: 38,
-                      borderRadius: "50%",
-                      display: "grid",
-                      placeItems: "center",
-                      bgcolor: "#fff",
-                      color: "#111827",
-                      fontWeight: 900,
-                    }}
-                  >
-                    {num}
-                  </Box>
-                  <Typography sx={{ fontWeight: 700 }}>{text}</Typography>
-                </Stack>
-              ))}
-            </Box>
-          </Paper>
-        </Box>
+              <Chip
+                label="READY"
+                size="small"
+                sx={{
+                  height: 22,
+                  bgcolor: "rgba(34,197,94,0.1)",
+                  color: "#4ade80",
+                  border: "1px solid rgba(34,197,94,0.3)",
+                  fontFamily: "monospace",
+                  fontWeight: 900,
+                  fontSize: ".66rem",
+                }}
+              />
+            </Stack>
+          </Box>
+        </Paper>
 
         {/* Pipeline tracker */}
         <PipelineTracker
