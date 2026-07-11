@@ -152,7 +152,7 @@ transparent
       >
         {/* Logo + wordmark — sits in the sidenav column */}
         <Box
-          onClick={() => onNavigate("nsa")}
+          onClick={() => onNavigate("dashboard")}
           sx={{
             width: navWidth - 16,
             minWidth: navWidth - 16,
@@ -384,7 +384,7 @@ transparent
         >
           {NAV_ITEMS.map((item) => {
             const active = item.page === currentPage;
-            const isComingSoon = item.page !== "nsa";
+            const isComingSoon = item.page !== "dashboard";
             return (
               <Tooltip
                 key={item.page}

@@ -164,7 +164,7 @@ const DONUT_DATA = [
   { name: 'Valid (NSA Cleared)', value: 5 },
   { name: 'Suspicious (Blocked)', value: 3 },
 ];
-const DONUT_COLORS = ['#6366f1', '#f43f5e'];
+//const DONUT_COLORS = ['#6366f1', '#f43f5e'];
 
 const STATUS_PILLS = [
   { dot: '#22c55e', label: 'Backend API', status: 'Online' },
@@ -176,189 +176,1067 @@ const STATUS_PILLS = [
 
 export default function Dashboard2() {
   const { user } = useAuth();
+
   const greeting = getGreeting();
-  const roleLabel = user?.role === 'SYSTEM_ADMIN' ? 'System Admin' : 'Event Organiser';
-  const roleColor = user?.role === 'SYSTEM_ADMIN' ? '#7c3aed' : '#0891b2';
+
+  const roleLabel =
+    user?.role === 'SYSTEM_ADMIN'
+      ? 'System Admin'
+      : 'Event Organiser';
+
+  const roleColor =
+    user?.role === 'SYSTEM_ADMIN'
+      ? '#a78bfa'
+      : '#22d3ee';
 
   return (
     <Box
       sx={{
         minHeight: `calc(100vh - ${HEADER_HEIGHT}px)`,
-        background: `
-          radial-gradient(circle at 15% 20%, rgba(99,102,241,0.10), transparent 35%),
-          radial-gradient(circle at 85% 75%, rgba(244,63,94,0.07), transparent 32%),
-          #f8f5ef
-        `,
+        bgcolor: '#020617',
+        color: '#e5e7eb',
         pb: 6,
+
+        backgroundImage: `
+          radial-gradient(
+            circle at 15% 10%,
+            rgba(34,211,238,0.09),
+            transparent 30%
+          ),
+          radial-gradient(
+            circle at 90% 65%,
+            rgba(139,92,246,0.08),
+            transparent 28%
+          ),
+          linear-gradient(
+            rgba(34,211,238,0.018) 1px,
+            transparent 1px
+          ),
+          linear-gradient(
+            90deg,
+            rgba(34,211,238,0.018) 1px,
+            transparent 1px
+          )
+        `,
+
+        backgroundSize: 'auto, auto, 32px 32px, 32px 32px',
       }}
     >
-      {/* ── 1. Hero strip ─────────────────────────────────────────────────── */}
+      {/* Hero console */}
       <Box
         sx={{
-          background: 'linear-gradient(120deg, #0f172a 0%, #1e1b4b 60%, #0f172a 100%)',
-          px: { xs: 3, md: 6 },
-          py: { xs: 4, md: 5 },
           position: 'relative',
           overflow: 'hidden',
+
+          px: { xs: 3, md: 6 },
+          py: { xs: 4, md: 5 },
+
+          bgcolor: '#050816',
+
+          borderBottom:
+            '1px solid rgba(34,211,238,0.16)',
+
+          boxShadow:
+            '0 20px 70px rgba(0,0,0,0.35)',
         }}
       >
-        <Box sx={{ position: 'absolute', width: 320, height: 320, borderRadius: '50%', background: 'radial-gradient(circle, rgba(99,102,241,0.25), transparent 70%)', top: -80, right: '10%', pointerEvents: 'none' }} />
-        <Box sx={{ position: 'absolute', width: 200, height: 200, borderRadius: '50%', background: 'radial-gradient(circle, rgba(244,63,94,0.15), transparent 70%)', bottom: -60, left: '5%', pointerEvents: 'none' }} />
+        <Box
+          sx={{
+            position: 'absolute',
+            inset: 0,
 
-        <Box sx={{ position: 'relative', zIndex: 1, maxWidth: 900 }}>
-          <Stack sx={{ flexDirection: 'row', gap: 1, flexWrap: 'wrap', mb: 2 }}>
+            backgroundImage: `
+              radial-gradient(
+                circle at 85% 20%,
+                rgba(34,211,238,0.14),
+                transparent 28%
+              ),
+              radial-gradient(
+                circle at 8% 100%,
+                rgba(139,92,246,0.10),
+                transparent 30%
+              )
+            `,
+
+            pointerEvents: 'none',
+          }}
+        />
+
+        <Box
+          sx={{
+            position: 'absolute',
+            inset: 0,
+
+            opacity: 0.12,
+
+            backgroundImage:
+              'linear-gradient(rgba(34,211,238,0.12) 1px, transparent 1px), linear-gradient(90deg, rgba(34,211,238,0.12) 1px, transparent 1px)',
+
+            backgroundSize: '34px 34px',
+
+            pointerEvents: 'none',
+          }}
+        />
+
+        <Box
+          sx={{
+            position: 'relative',
+            zIndex: 1,
+            maxWidth: 1050,
+          }}
+        >
+          <Stack
+            direction="row"
+            spacing={1}
+            sx={{
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              mb: 2,
+            }}
+          >
             <Chip
-              label={roleLabel}
+              label={`$ role --${roleLabel
+                .toLowerCase()
+                .replaceAll(' ', '-')}`}
               size="small"
               sx={{
-                bgcolor: `${roleColor}22`,
-                color: roleColor === '#7c3aed' ? '#c4b5fd' : '#67e8f9',
-                border: `1px solid ${roleColor}44`,
-                fontWeight: 700,
-                fontSize: '0.72rem',
+                bgcolor: `${roleColor}14`,
+                color: roleColor,
+                border: `1px solid ${roleColor}45`,
+                fontWeight: 800,
+                fontFamily: 'monospace',
               }}
             />
+
             <Chip
-              label="Deliverable 04 — Prototype"
+              label="$ deliverable_04 --prototype"
               size="small"
-              sx={{ bgcolor: 'rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.55)', border: '1px solid rgba(255,255,255,0.12)', fontWeight: 600, fontSize: '0.72rem' }}
+              sx={{
+                bgcolor: 'rgba(148,163,184,0.08)',
+                color: '#94a3b8',
+                border:
+                  '1px solid rgba(148,163,184,0.18)',
+                fontWeight: 700,
+                fontFamily: 'monospace',
+              }}
             />
           </Stack>
 
-          <Typography sx={{ fontSize: { xs: '1.6rem', md: '2.2rem' }, fontWeight: 800, color: '#f8fafc', lineHeight: 1.2, letterSpacing: '-0.03em' }}>
-            {greeting}, {user?.fullName ?? 'User'} 👋
+          <Typography
+            sx={{
+              color: '#22d3ee',
+              fontFamily: 'monospace',
+              fontWeight: 800,
+              fontSize: '0.76rem',
+              letterSpacing: 1,
+              mb: 1,
+            }}
+          >
+            ~/eventsense-ai/dashboard
           </Typography>
-          <Typography sx={{ mt: 1, fontSize: { xs: '0.9rem', md: '1rem' }, color: 'rgba(248,250,252,0.55)', fontWeight: 500 }}>
-            Hybrid NSA + Sentiment Analysis Platform
+
+          <Typography
+            sx={{
+              fontSize: {
+                xs: '2rem',
+                md: '3rem',
+              },
+
+              fontWeight: 900,
+
+              color: '#f8fafc',
+
+              lineHeight: 1.1,
+
+              fontFamily: 'monospace',
+            }}
+          >
+            &gt; {greeting.toLowerCase().replaceAll(' ', '_')},{' '}
+            <Box
+              component="span"
+              sx={{ color: '#67e8f9' }}
+            >
+              {user?.fullName?.split(' ')[0] ?? 'user'}
+            </Box>
+            <Box
+              component="span"
+              sx={{ color: '#22d3ee' }}
+            >
+              .
+            </Box>
           </Typography>
+
+          <Typography
+            sx={{
+              mt: 1.5,
+
+              maxWidth: 760,
+
+              color: '#94a3b8',
+
+              fontFamily: 'monospace',
+
+              lineHeight: 1.8,
+            }}
+          >
+            Hybrid NSA and sentiment-analysis operations console.
+            Monitor datasets, anomaly scans, pipeline execution and
+            generated intelligence from one workspace.
+          </Typography>
+
+          <Stack
+            direction={{ xs: 'column', sm: 'row' }}
+            spacing={1.5}
+            sx={{ mt: 3 }}
+          >
+            {[
+              'system.boot()',
+              'nsa.status("ready")',
+              'sentiment.status("pending")',
+            ].map((command) => (
+              <Chip
+                key={command}
+                label={command}
+                size="small"
+                sx={{
+                  bgcolor: '#020617',
+                  color: '#bbf7d0',
+                  border:
+                    '1px solid rgba(34,197,94,0.22)',
+                  fontFamily: 'monospace',
+                  fontWeight: 700,
+                }}
+              />
+            ))}
+          </Stack>
         </Box>
       </Box>
 
       <Container maxWidth="xl" sx={{ mt: 4 }}>
+        {/* Metric cards */}
+        <Box
+          sx={{
+            display: 'grid',
 
-        {/* ── 2. Stat cards ───────────────────────────────────────────────── */}
-        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(4, 1fr)' }, gap: 2, mb: 4 }}>
-          {STAT_CARDS.map((card) => (
-            <Paper key={card.label} elevation={0} sx={{ p: 2.5, borderRadius: 4, border: '1px solid', borderColor: 'grey.200', bgcolor: '#fff', position: 'relative', overflow: 'hidden' }}>
-              <Box sx={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, bgcolor: card.accent, borderRadius: '4px 4px 0 0' }} />
-              <Box sx={{ width: 42, height: 42, borderRadius: 3, bgcolor: card.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: card.accent, mb: 2 }}>
-                {card.icon}
-              </Box>
-              <Typography sx={{ fontSize: '2rem', fontWeight: 800, color: '#0f172a', lineHeight: 1 }}>{card.value}</Typography>
-              <Typography sx={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600, mt: 0.5 }}>{card.label}</Typography>
-              <Typography sx={{ fontSize: '0.72rem', color: card.accent, fontWeight: 600, mt: 0.75 }}>{card.trend}</Typography>
-            </Paper>
+            gridTemplateColumns: {
+              xs: '1fr',
+              sm: 'repeat(2, 1fr)',
+              lg: 'repeat(4, 1fr)',
+            },
+
+            gap: 2,
+            mb: 4,
+          }}
+        >
+          {STAT_CARDS.map((card, index) => (
+            <MetricCard
+              key={card.label}
+              {...card}
+              command={`metric_${String(index + 1).padStart(2, '0')}`}
+            />
           ))}
         </Box>
 
-        {/* ── 3. Pipeline stages ─────────────────────────────────────────── */}
-        <Paper elevation={0} sx={{ p: 3, borderRadius: 4, border: '1px solid', borderColor: 'grey.200', bgcolor: '#fff', mb: 4 }}>
-          <Stack sx={{ flexDirection: 'row', alignItems: 'center', gap: 1, mb: 2.5 }}>
-            <Activity size={18} color="#6366f1" />
-            <Typography sx={{ fontWeight: 700, color: '#0f172a', fontSize: '0.95rem' }}>Pipeline Stage Status</Typography>
-          </Stack>
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(4, 1fr)' }, gap: 2 }}>
+        {/* Pipeline */}
+        <ConsolePanel
+          command="$ pipeline.inspect()"
+          subtitle="Execution state across the EventSense AI processing stages."
+          icon={<Activity size={18} />}
+          accent="#22d3ee"
+          sx={{ mb: 4 }}
+        >
+          <Box
+            sx={{
+              display: 'grid',
+
+              gridTemplateColumns: {
+                xs: '1fr',
+                sm: 'repeat(2, 1fr)',
+                lg: 'repeat(4, 1fr)',
+              },
+
+              gap: 2,
+            }}
+          >
             {PIPELINE_STAGES.map((stage) => (
-              <Box key={stage.num} sx={{ p: 2, borderRadius: 3, border: `1px solid ${stage.borderColor}`, bgcolor: stage.statusBg }}>
-                <Stack sx={{ flexDirection: 'row', alignItems: 'center', gap: 1, mb: 1.5 }}>
-                  <Box sx={{ color: stage.iconColor, display: 'flex' }}>{stage.icon}</Box>
-                  <Typography sx={{ fontSize: '0.72rem', fontWeight: 800, color: '#94a3b8', letterSpacing: '0.06em' }}>{stage.num}</Typography>
-                </Stack>
-                <Typography sx={{ fontWeight: 700, fontSize: '0.88rem', color: '#0f172a', mb: 0.75 }}>{stage.label}</Typography>
-                <Chip label={stage.status} size="small" sx={{ height: 20, fontSize: '0.68rem', fontWeight: 700, bgcolor: stage.statusBg, color: stage.statusColor, border: `1px solid ${stage.borderColor}` }} />
-              </Box>
+              <PipelineStageCard
+                key={stage.num}
+                {...stage}
+              />
             ))}
           </Box>
-        </Paper>
+        </ConsolePanel>
 
-        {/* ── 4. Two-column lower section ────────────────────────────────── */}
-        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1.65fr 1fr' }, gap: 3, mb: 4 }}>
+        {/* Lower content */}
+        <Box
+          sx={{
+            display: 'grid',
 
+            gridTemplateColumns: {
+              xs: '1fr',
+              lg: '1.6fr 1fr',
+            },
+
+            gap: 3,
+            mb: 4,
+          }}
+        >
           {/* Activity feed */}
-          <Paper elevation={0} sx={{ p: 3, borderRadius: 4, border: '1px solid', borderColor: 'grey.200', bgcolor: '#fff' }}>
-            <Stack sx={{ flexDirection: 'row', alignItems: 'center', gap: 1, mb: 2.5 }}>
-              <Activity size={18} color="#6366f1" />
-              <Typography sx={{ fontWeight: 700, color: '#0f172a', fontSize: '0.95rem' }}>Recent Activity</Typography>
-            </Stack>
-            <Stack sx={{ gap: 0 }}>
-              {ACTIVITY.map((item, idx) => (
-                <Box key={idx}>
-                  <Stack sx={{ flexDirection: 'row', gap: 2, py: 1.75, alignItems: 'flex-start' }}>
-                    <Box sx={{ width: 34, height: 34, borderRadius: '50%', bgcolor: item.iconBg, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, mt: 0.25 }}>
+          <ConsolePanel
+            command="$ tail -f system_activity.log"
+            subtitle="Live events generated by platform processes."
+            icon={<Activity size={18} />}
+            accent="#22d3ee"
+          >
+            <Stack spacing={0}>
+              {ACTIVITY.map((item, index) => (
+                <Box key={`${item.title}-${index}`}>
+                  <Stack
+                    direction="row"
+                    spacing={2}
+                    sx={{
+                      py: 1.8,
+                      alignItems: 'flex-start',
+                    }}
+                  >
+                    <Box
+                      sx={{
+                        width: 34,
+                        height: 34,
+
+                        borderRadius: 2,
+
+                        bgcolor: `${item.iconBg}18`,
+
+                        color: item.iconBg,
+
+                        border:
+                          `1px solid ${item.iconBg}40`,
+
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+
+                        flexShrink: 0,
+
+                        boxShadow:
+                          `0 0 15px ${item.iconBg}15`,
+                      }}
+                    >
                       {item.icon}
                     </Box>
+
                     <Box sx={{ flex: 1, minWidth: 0 }}>
-                      <Stack sx={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 1 }}>
-                        <Typography sx={{ fontWeight: 700, fontSize: '0.88rem', color: '#0f172a' }}>{item.title}</Typography>
-                        <Typography sx={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0 }}>{item.time}</Typography>
+                      <Stack
+                        direction="row"
+                        sx={{
+                          justifyContent: 'space-between',
+                          alignItems: 'flex-start',
+                          gap: 1,
+                        }}
+                      >
+                        <Typography
+                          sx={{
+                            fontWeight: 800,
+                            fontSize: '0.85rem',
+                            color: '#e5e7eb',
+                            fontFamily: 'monospace',
+                          }}
+                        >
+                          {`> ${item.title}`}
+                        </Typography>
+
+                        <Typography
+                          sx={{
+                            fontSize: '0.68rem',
+                            color: '#64748b',
+                            fontFamily: 'monospace',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {item.time}
+                        </Typography>
                       </Stack>
-                      <Typography sx={{ fontSize: '0.8rem', color: '#64748b', mt: 0.25 }}>{item.desc}</Typography>
+
+                      <Typography
+                        sx={{
+                          mt: 0.4,
+                          fontSize: '0.78rem',
+                          color: '#94a3b8',
+                          lineHeight: 1.65,
+                          fontFamily: 'monospace',
+                        }}
+                      >
+                        {item.desc}
+                      </Typography>
                     </Box>
                   </Stack>
-                  {idx < ACTIVITY.length - 1 && <Divider sx={{ borderColor: 'grey.100' }} />}
+
+                  {index < ACTIVITY.length - 1 && (
+                    <Divider
+                      sx={{
+                        borderColor:
+                          'rgba(148,163,184,0.10)',
+                      }}
+                    />
+                  )}
                 </Box>
               ))}
             </Stack>
-          </Paper>
+          </ConsolePanel>
 
-          {/* Right column */}
-          <Stack sx={{ gap: 3 }}>
+          <Stack spacing={3}>
             {/* Donut chart */}
-            <Paper elevation={0} sx={{ p: 3, borderRadius: 4, border: '1px solid', borderColor: 'grey.200', bgcolor: '#fff' }}>
-              <Stack sx={{ flexDirection: 'row', alignItems: 'center', gap: 1, mb: 2 }}>
-                <ShieldCheck size={18} color="#6366f1" />
-                <Typography sx={{ fontWeight: 700, color: '#0f172a', fontSize: '0.95rem' }}>NSA Scan Breakdown</Typography>
-              </Stack>
-              <Box sx={{ display: 'flex', justifyContent: 'center' }}>
-                <PieChart width={220} height={200}>
-                  <Pie data={DONUT_DATA} cx={110} cy={90} innerRadius={52} outerRadius={78} paddingAngle={3} dataKey="value" stroke="none">
+            <ConsolePanel
+              command="$ nsa.breakdown()"
+              subtitle="Valid and blocked feedback distribution."
+              icon={<ShieldCheck size={18} />}
+              accent="#22d3ee"
+            >
+              <Box
+                sx={{
+                  position: 'relative',
+                  display: 'flex',
+                  justifyContent: 'center',
+                }}
+              >
+                <PieChart width={260} height={230}>
+                  <Pie
+                    data={DONUT_DATA}
+                    cx={130}
+                    cy={100}
+                    innerRadius={58}
+                    outerRadius={84}
+                    paddingAngle={4}
+                    dataKey="value"
+                    stroke="none"
+                  >
                     {DONUT_DATA.map((_, index) => (
-                      <Cell key={`cell-${index}`} fill={DONUT_COLORS[index]} />
+                      <Cell
+                        key={`cell-${index}`}
+                        fill={
+                          index === 0
+                            ? '#22d3ee'
+                            : '#f87171'
+                        }
+                      />
                     ))}
                   </Pie>
-                  <RechartsTooltip contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb', fontSize: '0.8rem' }} />
-                  <Legend iconType="circle" iconSize={9} wrapperStyle={{ fontSize: '0.78rem', paddingTop: 4 }} />
+
+                  <RechartsTooltip
+                    contentStyle={{
+                      backgroundColor: '#020617',
+                      border:
+                        '1px solid rgba(34,211,238,0.26)',
+                      borderRadius: 10,
+                      color: '#e5e7eb',
+                      fontFamily: 'monospace',
+                      fontSize: '0.78rem',
+                    }}
+                  />
+
+                  <Legend
+                    iconType="circle"
+                    iconSize={8}
+                    wrapperStyle={{
+                      color: '#94a3b8',
+                      fontFamily: 'monospace',
+                      fontSize: '0.72rem',
+                    }}
+                  />
                 </PieChart>
+
+                <Box
+                  sx={{
+                    position: 'absolute',
+                    top: 68,
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    textAlign: 'center',
+                  }}
+                >
+                  <Typography
+                    sx={{
+                      fontSize: '1.8rem',
+                      fontWeight: 900,
+                      color: '#f8fafc',
+                      fontFamily: 'monospace',
+                    }}
+                  >
+                    8
+                  </Typography>
+
+                  <Typography
+                    sx={{
+                      fontSize: '0.64rem',
+                      color: '#64748b',
+                      fontFamily: 'monospace',
+                    }}
+                  >
+                    records
+                  </Typography>
+                </Box>
               </Box>
-            </Paper>
+            </ConsolePanel>
 
             {/* Quick actions */}
-            <Paper elevation={0} sx={{ p: 3, borderRadius: 4, border: '1px solid', borderColor: 'grey.200', bgcolor: '#fff' }}>
-              <Stack sx={{ flexDirection: 'row', alignItems: 'center', gap: 1, mb: 2 }}>
-                <Zap size={18} color="#6366f1" />
-                <Typography sx={{ fontWeight: 700, color: '#0f172a', fontSize: '0.95rem' }}>Quick Actions</Typography>
+            <ConsolePanel
+              command="$ actions.available"
+              subtitle="Run or inspect platform processes."
+              icon={<Zap size={18} />}
+              accent="#a78bfa"
+            >
+              <Stack spacing={1.5}>
+                <Button
+                  variant="contained"
+                  startIcon={<Play size={15} />}
+                  fullWidth
+                  sx={{
+                    py: 1.25,
+
+                    borderRadius: 2,
+
+                    bgcolor: '#22d3ee',
+
+                    color: '#020617',
+
+                    fontWeight: 900,
+
+                    fontFamily: 'monospace',
+
+                    textTransform: 'none',
+
+                    boxShadow:
+                      '0 0 24px rgba(34,211,238,0.24)',
+
+                    '&:hover': {
+                      bgcolor: '#67e8f9',
+
+                      boxShadow:
+                        '0 0 34px rgba(34,211,238,0.35)',
+                    },
+                  }}
+                >
+                  ./run_nsa_analysis
+                </Button>
+
+                <Button
+                  variant="outlined"
+                  startIcon={<FileBarChart2 size={15} />}
+                  fullWidth
+                  sx={{
+                    py: 1.15,
+                    borderRadius: 2,
+                    borderColor:
+                      'rgba(139,92,246,0.4)',
+                    color: '#c4b5fd',
+                    fontWeight: 800,
+                    fontFamily: 'monospace',
+                    textTransform: 'none',
+
+                    '&:hover': {
+                      borderColor: '#a78bfa',
+                      bgcolor:
+                        'rgba(139,92,246,0.08)',
+                    },
+                  }}
+                >
+                  view --scan-results
+                </Button>
+
+                <Button
+                  variant="outlined"
+                  startIcon={<FileBarChart2 size={15} />}
+                  fullWidth
+                  disabled
+                  sx={{
+                    py: 1.15,
+                    borderRadius: 2,
+                    fontWeight: 800,
+                    fontFamily: 'monospace',
+                    textTransform: 'none',
+                  }}
+                >
+                  generate --report
+                </Button>
               </Stack>
-              <Stack sx={{ gap: 1.5 }}>
-                <Button variant="contained" startIcon={<Play size={15} />} fullWidth sx={{ bgcolor: '#6366f1', color: '#fff', borderRadius: 2.5, fontWeight: 700, textTransform: 'none', '&:hover': { bgcolor: '#4f46e5' } }}>
-                  Run NSA Analysis
-                </Button>
-                <Button variant="outlined" startIcon={<FileBarChart2 size={15} />} fullWidth sx={{ borderColor: '#6366f1', color: '#6366f1', borderRadius: 2.5, fontWeight: 700, textTransform: 'none', '&:hover': { bgcolor: 'rgba(99,102,241,0.05)' } }}>
-                  View Results
-                </Button>
-                <Button variant="outlined" startIcon={<FileBarChart2 size={15} />} fullWidth disabled sx={{ borderRadius: 2.5, fontWeight: 700, textTransform: 'none' }}>
-                  Generate Report
-                </Button>
-              </Stack>
-            </Paper>
+            </ConsolePanel>
           </Stack>
         </Box>
 
-        {/* ── 5. System status footer ────────────────────────────────────── */}
-        <Paper elevation={0} sx={{ p: 2.5, borderRadius: 4, border: '1px solid', borderColor: 'grey.200', bgcolor: '#fff' }}>
-          <Stack sx={{ flexDirection: { xs: 'column', sm: 'row' }, gap: 2, alignItems: { sm: 'center' }, flexWrap: 'wrap' }}>
-            <Typography sx={{ fontWeight: 700, fontSize: '0.8rem', color: '#64748b', mr: 1 }}>SYSTEM STATUS</Typography>
-            {STATUS_PILLS.map((pill) => (
-              <Box key={pill.label} sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 2, py: 0.75, borderRadius: 999, border: '1px solid', borderColor: 'grey.200', bgcolor: '#f8fafc' }}>
-                <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: pill.dot, flexShrink: 0, boxShadow: `0 0 6px ${pill.dot}` }} />
-                <Typography sx={{ fontSize: '0.8rem', fontWeight: 700, color: '#0f172a' }}>{pill.label}</Typography>
-                <Typography sx={{ fontSize: '0.8rem', color: '#64748b' }}>—</Typography>
-                <Typography sx={{ fontSize: '0.8rem', color: pill.dot === '#f59e0b' ? '#f59e0b' : '#22c55e', fontWeight: 600 }}>{pill.status}</Typography>
-              </Box>
-            ))}
+        {/* System status */}
+        <Paper
+          elevation={0}
+          sx={{
+            p: 2.5,
+
+            borderRadius: 3,
+
+            bgcolor: '#050816',
+
+            border:
+              '1px solid rgba(34,211,238,0.16)',
+
+            boxShadow:
+              '0 0 30px rgba(34,211,238,0.05)',
+          }}
+        >
+          <Stack
+            direction={{ xs: 'column', md: 'row' }}
+            spacing={2}
+            sx={{
+              alignItems: {
+                xs: 'flex-start',
+                md: 'center',
+              },
+
+              flexWrap: 'wrap',
+            }}
+          >
+            <Typography
+              sx={{
+                color: '#22d3ee',
+                fontWeight: 900,
+                fontSize: '0.75rem',
+                fontFamily: 'monospace',
+                mr: 1,
+              }}
+            >
+              $ system.status
+            </Typography>
+
+            {STATUS_PILLS.map((pill) => {
+              const warning = pill.dot === '#f59e0b';
+
+              return (
+                <Box
+                  key={pill.label}
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1,
+
+                    px: 1.6,
+                    py: 0.75,
+
+                    borderRadius: 2,
+
+                    bgcolor: '#020617',
+
+                    border:
+                      '1px solid rgba(148,163,184,0.15)',
+                  }}
+                >
+                  <Box
+                    sx={{
+                      width: 7,
+                      height: 7,
+
+                      borderRadius: '50%',
+
+                      bgcolor: pill.dot,
+
+                      boxShadow: `0 0 10px ${pill.dot}`,
+                    }}
+                  />
+
+                  <Typography
+                    sx={{
+                      fontSize: '0.72rem',
+                      color: '#cbd5e1',
+                      fontWeight: 800,
+                      fontFamily: 'monospace',
+                    }}
+                  >
+                    {pill.label.toLowerCase().replaceAll(' ', '_')}
+                  </Typography>
+
+                  <Typography
+                    sx={{
+                      color: '#475569',
+                      fontFamily: 'monospace',
+                    }}
+                  >
+                    :
+                  </Typography>
+
+                  <Typography
+                    sx={{
+                      fontSize: '0.72rem',
+                      color: warning
+                        ? '#fbbf24'
+                        : '#4ade80',
+                      fontWeight: 800,
+                      fontFamily: 'monospace',
+                    }}
+                  >
+                    {pill.status.toLowerCase().replaceAll(' ', '_')}
+                  </Typography>
+                </Box>
+              );
+            })}
           </Stack>
         </Paper>
-
       </Container>
     </Box>
+  );
+}
+
+interface MetricCardProps {
+  command: string;
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  trend: string;
+  accent: string;
+  bg: string;
+}
+
+function MetricCard({
+  command,
+  icon,
+  label,
+  value,
+  trend,
+  accent,
+}: MetricCardProps) {
+  return (
+    <Paper
+      elevation={0}
+      sx={{
+        position: 'relative',
+        overflow: 'hidden',
+
+        p: 2.5,
+
+        borderRadius: 3,
+
+        bgcolor: '#050816',
+
+        border: `1px solid ${accent}30`,
+
+        boxShadow:
+          `0 0 25px ${accent}10`,
+
+        transition: '0.2s',
+
+        '&:hover': {
+          transform: 'translateY(-4px)',
+
+          borderColor: `${accent}65`,
+
+          boxShadow:
+            `0 0 35px ${accent}1f`,
+        },
+
+        '&::after': {
+          content: '""',
+
+          position: 'absolute',
+
+          top: 0,
+          left: 0,
+          right: 0,
+
+          height: 2,
+
+          bgcolor: accent,
+
+          boxShadow:
+            `0 0 14px ${accent}`,
+        },
+      }}
+    >
+      <Typography
+        sx={{
+          mb: 2,
+
+          color: '#64748b',
+
+          fontSize: '0.67rem',
+
+          fontWeight: 800,
+
+          fontFamily: 'monospace',
+        }}
+      >
+        $ {command}
+      </Typography>
+
+      <Stack
+        direction="row"
+        sx={{
+          justifyContent: 'space-between',
+          alignItems: 'flex-start',
+          mb: 2,
+        }}
+      >
+        <Box
+          sx={{
+            width: 42,
+            height: 42,
+
+            borderRadius: 2,
+
+            bgcolor: `${accent}12`,
+
+            color: accent,
+
+            border: `1px solid ${accent}35`,
+
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+
+            boxShadow:
+              `0 0 16px ${accent}18`,
+          }}
+        >
+          {icon}
+        </Box>
+
+        <Typography
+          sx={{
+            color: accent,
+            fontFamily: 'monospace',
+            fontSize: '0.68rem',
+            fontWeight: 800,
+          }}
+        >
+          ONLINE
+        </Typography>
+      </Stack>
+
+      <Typography
+        sx={{
+          fontSize: '2rem',
+
+          fontWeight: 900,
+
+          color: '#f8fafc',
+
+          lineHeight: 1,
+
+          fontFamily: 'monospace',
+        }}
+      >
+        {value}
+      </Typography>
+
+      <Typography
+        sx={{
+          mt: 0.7,
+
+          color: '#cbd5e1',
+
+          fontSize: '0.78rem',
+
+          fontWeight: 800,
+
+          fontFamily: 'monospace',
+        }}
+      >
+        {label}
+      </Typography>
+
+      <Typography
+        sx={{
+          mt: 0.9,
+
+          color: accent,
+
+          fontSize: '0.68rem',
+
+          fontFamily: 'monospace',
+        }}
+      >
+        {`> ${trend}`}
+      </Typography>
+    </Paper>
+  );
+}
+
+function PipelineStageCard({
+  num,
+  label,
+  status,
+  statusColor,
+  borderColor,
+  icon,
+  iconColor,
+}: (typeof PIPELINE_STAGES)[number]) {
+  return (
+    <Box
+      sx={{
+        position: 'relative',
+
+        p: 2.2,
+
+        minHeight: 150,
+
+        borderRadius: 3,
+
+        bgcolor: '#020617',
+
+        border: `1px solid ${borderColor}`,
+
+        boxShadow:
+          `0 0 18px ${statusColor}0e`,
+
+        transition: '0.2s',
+
+        '&:hover': {
+          transform: 'translateY(-3px)',
+          borderColor: statusColor,
+        },
+      }}
+    >
+      <Stack
+        direction="row"
+        sx={{
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          mb: 2,
+        }}
+      >
+        <Typography
+          sx={{
+            color: statusColor,
+
+            fontWeight: 900,
+
+            fontFamily: 'monospace',
+
+            fontSize: '0.78rem',
+          }}
+        >
+          {num}
+        </Typography>
+
+        <Box
+          sx={{
+            color: iconColor,
+            display: 'flex',
+          }}
+        >
+          {icon}
+        </Box>
+      </Stack>
+
+      <Typography
+        sx={{
+          color: '#f8fafc',
+
+          fontWeight: 900,
+
+          fontFamily: 'monospace',
+
+          fontSize: '0.85rem',
+
+          mb: 1.5,
+        }}
+      >
+        {label.replaceAll(' ', '_').toLowerCase()}()
+      </Typography>
+
+      <Chip
+        label={`$ ${status.toLowerCase().replaceAll(' ', '_')}`}
+        size="small"
+        sx={{
+          bgcolor: `${statusColor}12`,
+          color: statusColor,
+          border: `1px solid ${statusColor}35`,
+          fontFamily: 'monospace',
+          fontWeight: 800,
+          fontSize: '0.64rem',
+        }}
+      />
+    </Box>
+  );
+}
+
+interface ConsolePanelProps {
+  command: string;
+  subtitle: string;
+  icon: React.ReactNode;
+  accent: string;
+  children: React.ReactNode;
+  sx?: object;
+}
+
+function ConsolePanel({
+  command,
+  subtitle,
+  icon,
+  accent,
+  children,
+  sx,
+}: ConsolePanelProps) {
+  return (
+    <Paper
+      elevation={0}
+      sx={{
+        p: 3,
+
+        borderRadius: 3,
+
+        bgcolor: '#050816',
+
+        border: `1px solid ${accent}25`,
+
+        boxShadow:
+          `0 0 30px ${accent}0b`,
+
+        ...sx,
+      }}
+    >
+      <Stack
+        direction="row"
+        spacing={1}
+        sx={{
+          alignItems: 'center',
+          mb: 0.7,
+        }}
+      >
+        <Box
+          sx={{
+            color: accent,
+            display: 'flex',
+          }}
+        >
+          {icon}
+        </Box>
+
+        <Typography
+          sx={{
+            color: '#f8fafc',
+
+            fontWeight: 900,
+
+            fontFamily: 'monospace',
+
+            fontSize: '0.88rem',
+          }}
+        >
+          {command}
+        </Typography>
+      </Stack>
+
+      <Typography
+        sx={{
+          color: '#64748b',
+
+          fontSize: '0.73rem',
+
+          fontFamily: 'monospace',
+
+          mb: 2.5,
+        }}
+      >
+        {subtitle}
+      </Typography>
+
+      {children}
+    </Paper>
   );
 }
