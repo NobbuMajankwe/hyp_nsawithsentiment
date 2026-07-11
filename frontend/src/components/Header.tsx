@@ -11,12 +11,14 @@ import {
   Typography,
 } from "@mui/material";
 import {
-  //BarChart2,
+  BarChart2,
   BrainCircuit,
   ChevronLeft,
   ChevronRight,
   FileText,
+  Gauge,
   LogOut,
+  Settings2,
   ShieldCheck,
   User,
 } from "lucide-react";
@@ -40,6 +42,11 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   {
+    page: "dashboard",
+    icon: <Gauge size={18} />,
+    label: "Dashboard",
+    sublabel: "Overview",
+  },{
     page: "nsa",
     icon: <ShieldCheck size={18} />,
     label: "NSA Analysis",
@@ -56,6 +63,18 @@ const NAV_ITEMS: NavItem[] = [
     icon: <FileText size={18} />,
     label: "Insight Story",
     sublabel: "Coming soon",
+  },
+  {
+    page: "settings",
+    icon: <Settings2 size={18} />,
+    label: "Settings",
+    sublabel: "Anomaly detection",
+  },
+  {
+    page: "analytics",
+    icon: <BarChart2 size={18} />,
+    label: "Analytics",
+    sublabel: "Reports",
   },
 ];
 

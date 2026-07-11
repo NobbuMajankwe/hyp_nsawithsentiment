@@ -1,116 +1,20 @@
 import { useState } from 'react';
 import { Alert, Box, Chip, Container, Paper, Snackbar, Stack, Typography } from '@mui/material';
 
-import { Header, SIDENAV_WIDTH, SIDENAV_COLLAPSED_WIDTH, HEADER_HEIGHT } from './components/Header';
-import { InputPanel } from './components/InputPanel';
-import { FeedbackCanvas } from './components/FeedbackCanvas';
-import { FindingsPanel } from './components/FindingsPanel';
-import { AnalyticsCharts } from './components/AnalyticsCharts';
-import { LoginPage, RegisterPage, ResetPasswordPage } from './pages/LoginPage';
-import { SentimentPage } from './pages/SentimentPage';
-import { InsightStoryPage } from './pages/InsightStoryPage';
-import { PipelineTracker } from './components/PipelineTracker';
+import { HEADER_HEIGHT } from '../components/Header';
+import { InputPanel } from '../components/InputPanel';
+import { FeedbackCanvas } from '../components/FeedbackCanvas';
+import { FindingsPanel } from '../components/FindingsPanel';
+import { AnalyticsCharts } from '../components/AnalyticsCharts';
+//import { PipelineTracker } from '../components/PipelineTracker';
 
-import { SAMPLE_TEXT } from './data/mockFeedback';
-import { buildSteps } from './data/pipelineSteps';
-import { runNsaAnalysis, type AnalyseResponse } from './services/api';
-import { useAuth } from './context/AuthContext';
-import type { AnalysisResult } from './types';
-import ProfilePage from './pages/ProfilePage';
-import Dashboard2 from './pages/Dashboard2';
-//import ResetPasswordPage from './pages/ResetPasswordPage';
+import { SAMPLE_TEXT } from '../data/mockFeedback';
+//import { buildSteps } from '../data/pipelineSteps';
+import { runNsaAnalysis, type AnalyseResponse } from '../services/api';
+import { useAuth } from '../context/AuthContext';
+import type { AnalysisResult } from '../types';
 
-export type Page = 'profile' | 'nsa' | 'sentiment' | 'insight' | 'settings' | 'dashboard' | 'analytics';
-
-// ---------------------------------------------------------------------------
-// Root — auth gate
-// ---------------------------------------------------------------------------
-
-export default function App() {
-  const { isAuthenticated } = useAuth();
-  const [authView, setAuthView] = useState<'login' | 'reset' | 'register'>('login');
-
-  if (!isAuthenticated) {
-  switch (authView) {
-    case 'register':
-      return (
-        <RegisterPage
-          onSwitchToLogin={() =>
-            setAuthView('login')
-          }
-        />
-      );
-
-    case 'reset':
-      return (
-        <ResetPasswordPage
-          onBackToLogin={() =>
-            setAuthView('login')
-          }
-        />
-      );
-
-    case 'login':
-    default:
-      return (
-        <LoginPage
-          onSwitchToRegister={() =>
-            setAuthView('register')
-          }
-          onSwitchToReset={() =>
-            setAuthView('reset')
-          }
-        />
-      );
-  }
-}
-
-  return <Dashboard />;
-}
-
-// ---------------------------------------------------------------------------
-// Dashboard — persistent shell with sidenav
-// ---------------------------------------------------------------------------
-
-function Dashboard() {
-  const [page, setPage]         = useState<Page>('nsa');
-  const [expanded, setExpanded] = useState(true);
-  const sideWidth = expanded ? SIDENAV_WIDTH : SIDENAV_COLLAPSED_WIDTH;
-
-  return (
-    <Box sx={{ minHeight: '100vh', bgcolor: '#f6f3ee' }}>
-      {/* Fixed header + attached sidenav */}
-      <Header
-        currentPage={page}
-        onNavigate={setPage}
-        expanded={expanded}
-        onToggle={() => setExpanded((e) => !e)}
-      />
-
-      {/* Content — pushed right by sidenav width and down by header height */}
-      <Box
-        sx={{
-          ml: { xs: 0, lg: `${sideWidth}px` },
-          mt: `${HEADER_HEIGHT}px`,
-          transition: 'margin-left 0.25s ease',
-          minHeight: `calc(100vh - ${HEADER_HEIGHT}px)`,
-        }}
-      >
-        {page === 'profile'       && <ProfilePage />}
-        {page === 'dashboard'       && <Dashboard2 />}
-         {page === 'nsa'       && <NsaPage />}
-        {page === 'sentiment' && <SentimentPage />}
-        {page === 'insight'   && <InsightStoryPage />}
-      </Box>
-    </Box>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// NSA page
-// ---------------------------------------------------------------------------
-
-function NsaPage() {
+export default function Dashboard2() {
   const { token } = useAuth();
   const [datasetText, setDatasetText] = useState(SAMPLE_TEXT);
   const [results, setResults]         = useState<AnalysisResult[]>([]);
@@ -161,7 +65,7 @@ function NsaPage() {
       {/* Creative intro section */}
       <Box
         sx={{
-          display: 'none',
+          display: 'grid',
           gridTemplateColumns: { xs: '1fr', lg: '1.1fr 0.9fr' },
           gap: 4,
           alignItems: 'center',
@@ -299,7 +203,7 @@ function NsaPage() {
       </Box>
 
       {/* Pipeline tracker */}
-      <PipelineTracker
+      {/* <PipelineTracker
         subtitle={
           results.length === 0
             ? 'Start by loading or editing the feedback dataset'
@@ -307,12 +211,12 @@ function NsaPage() {
         }
         steps={buildSteps(results.length === 0 ? 0 : 1)}
         activeColor="#6366f1"
-      />
+      /> */}
 
       {/* Workspace layout */}
       <Box
         sx={{
-          display: 'grid',
+          display: 'none',
           gridTemplateColumns: { xs: '1fr', xl: 'minmax(0, 1fr) 380px' },
           gap: 3,
           alignItems: 'start',
