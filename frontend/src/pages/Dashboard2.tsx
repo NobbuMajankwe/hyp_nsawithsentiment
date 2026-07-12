@@ -196,7 +196,6 @@ export default function Dashboard2() {
         bgcolor: '#020617',
         color: '#e5e7eb',
         pb: 6,
-//display:'none',
         backgroundImage: `
           radial-gradient(
             circle at 15% 10%,
