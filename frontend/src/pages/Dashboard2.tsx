@@ -148,7 +148,7 @@ const ACTIVITY: ActivityItem[] = [
     icon: <Zap size={15} />,
     iconBg: '#7c3aed',
     title: 'System initialised',
-    desc: 'SignalCheck AI platform loaded and ready',
+    desc: 'EventSense AI platform loaded and ready',
     time: 'Today',
   },
   {

@@ -1,5 +1,5 @@
 """
-email_service.py — Mailgun email delivery for SignalCheck AI
+email_service.py — Mailgun email delivery for EventSense AI
 =============================================================
 Sends transactional emails (verification OTPs, password reset links)
 via the Mailgun HTTP API.
@@ -26,9 +26,9 @@ MAILGUN_DOMAIN: str = os.getenv("MAILGUN_DOMAIN", "")
 FROM_EMAIL: str = os.getenv(
     "FROM_EMAIL",
     (
-        f"SignalCheck AI <noreply@{MAILGUN_DOMAIN}>"
+        f"EventSense AI <noreply@{MAILGUN_DOMAIN}>"
         if MAILGUN_DOMAIN
-        else "noreply@signalcheck.ai"
+        else "noreply@EventSense.ai"
     ),
 )
 
@@ -94,17 +94,17 @@ def send_email(to: str, subject: str, html: str, text: str) -> None:
 
 
 def send_verification_email(to: str, full_name: str, otp: str) -> None:
-    subject = "Verify your SignalCheck AI account"
+    subject = "Verify your EventSense AI account"
     text = (
         f"Hi {full_name},\n\n"
         f"Your verification code is: {otp}\n\n"
         "This code expires in 15 minutes.\n\n"
         "If you did not create an account, please ignore this email.\n\n"
-        "— The SignalCheck AI team"
+        "— The EventSense AI team"
     )
     html = f"""
     <div style="font-family:sans-serif;max-width:480px;margin:auto;padding:32px">
-      <h2 style="color:#0f172a;margin-bottom:4px">SignalCheck AI</h2>
+      <h2 style="color:#0f172a;margin-bottom:4px">EventSense AI</h2>
       <p style="color:#64748b;margin-top:0">Hybrid NSA + Sentiment Analysis Platform</p>
       <hr style="border:none;border-top:1px solid #e2e8f0;margin:24px 0"/>
       <p style="color:#0f172a">Hi <strong>{full_name}</strong>,</p>
@@ -126,17 +126,17 @@ def send_verification_email(to: str, full_name: str, otp: str) -> None:
 
 
 def send_password_reset_email(to: str, full_name: str, otp: str) -> None:
-    subject = "Reset your SignalCheck AI password"
+    subject = "Reset your EventSense AI password"
     text = (
         f"Hi {full_name},\n\n"
         f"Your password reset code is: {otp}\n\n"
         "This code expires in 15 minutes.\n\n"
         "If you did not request a password reset, please ignore this email.\n\n"
-        "— The SignalCheck AI team"
+        "— The EventSense AI team"
     )
     html = f"""
     <div style="font-family:sans-serif;max-width:480px;margin:auto;padding:32px">
-      <h2 style="color:#0f172a;margin-bottom:4px">SignalCheck AI</h2>
+      <h2 style="color:#0f172a;margin-bottom:4px">EventSense AI</h2>
       <p style="color:#64748b;margin-top:0">Password Reset</p>
       <hr style="border:none;border-top:1px solid #e2e8f0;margin:24px 0"/>
       <p style="color:#0f172a">Hi <strong>{full_name}</strong>,</p>
