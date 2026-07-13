@@ -62,6 +62,31 @@ export async function apiResetPassword(email: string, newPassword: string) {
   return response.data;
 }
 // ---------------------------------------------------------------------------
+// NSA — fetch latest valid records for sentiment page
+// ---------------------------------------------------------------------------
+
+export interface NsaLatestValidResponse {
+  found: boolean;
+  sessionInfo: {
+    totalRecords: number;
+    validRecords: number;
+    suspiciousRecords: number;
+    createdAt: string;
+  } | null;
+  records: { id: number; text: string }[];
+}
+
+export async function fetchLatestValidRecords(
+  token: string,
+): Promise<NsaLatestValidResponse> {
+  const { data } = await apiClient.get<NsaLatestValidResponse>(
+    '/api/nsa/latest-valid',
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  return data;
+}
+
+// ---------------------------------------------------------------------------
 // NSA analysis (requires token)
 // ---------------------------------------------------------------------------
 
@@ -80,6 +105,24 @@ export async function runNsaAnalysis(
   const { data } = await apiClient.post<AnalyseResponse>(
     '/api/nsa/analyse',
     { feedback },
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  return data;
+}
+
+// ---------------------------------------------------------------------------
+// Sentiment analysis (requires token)
+// ---------------------------------------------------------------------------
+
+import type { SentimentResponse } from '../types';
+
+export async function runSentimentAnalysis(
+  texts: string[],
+  token: string,
+): Promise<SentimentResponse> {
+  const { data } = await apiClient.post<SentimentResponse>(
+    '/api/sentiment/analyse',
+    { texts },
     { headers: { Authorization: `Bearer ${token}` } },
   );
   return data;

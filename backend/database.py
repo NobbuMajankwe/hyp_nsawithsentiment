@@ -71,6 +71,7 @@ CREATE TABLE IF NOT EXISTS users (
     role VARCHAR(50) NOT NULL CHECK (
         role IN ('EVENT_ORGANISER', 'SYSTEM_ADMIN')
     ),
+    is_verified BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 """
@@ -264,6 +265,20 @@ CREATE INDEX IF NOT EXISTS idx_nsa_session_results_session
 ON nsa_session_results(session_id);
 """
 
+CREATE_OTP_TABLE = """
+CREATE TABLE IF NOT EXISTS otp_codes (
+    otp_id      SERIAL PRIMARY KEY,
+    email       TEXT NOT NULL,
+    code        TEXT NOT NULL,
+    purpose     TEXT NOT NULL CHECK (purpose IN ('verify_email', 'reset_password')),
+    used        BOOLEAN NOT NULL DEFAULT FALSE,
+    expires_at  TIMESTAMP NOT NULL,
+    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_otp_email_purpose
+ON otp_codes(email, purpose);
+"""
+
 
 def init_db() -> None:
     """
@@ -284,6 +299,7 @@ def init_db() -> None:
         CREATE_INDEXES,
         CREATE_NSA_SESSIONS_TABLE,
         CREATE_NSA_SESSION_RESULTS_TABLE,
+        CREATE_OTP_TABLE,
     ]
 
     with get_cursor(commit=True) as cur:

@@ -28,6 +28,7 @@ from auth import (
     get_user_by_id,
 )
 from database import init_db, get_cursor
+from sentiment import classify_sentiment
 
 
 # ---------------------------------------------------------------------------
@@ -365,6 +366,60 @@ def reset_password(body: ResetPasswordRequest):
 # ---------------------------------------------------------------------------
 
 
+@app.get("/api/nsa/latest-valid")
+def get_latest_valid_records(current_user: dict = Depends(get_current_user)):
+    """
+    Return the Valid (non-suspicious) records from the user's most recent
+    NSA session. Used by the Sentiment page to auto-load input without
+    requiring the user to paste text again.
+    """
+    user_id = current_user["sub"]
+
+    with get_cursor() as cur:
+        # Get the most recent session for this user
+        cur.execute(
+            """
+            SELECT session_id, created_at, total_records, valid_records, suspicious_records
+            FROM nsa_sessions
+            WHERE user_id = %s
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            (user_id,),
+        )
+        session = cur.fetchone()
+
+        if not session:
+            return {"found": False, "records": [], "sessionInfo": None}
+
+        # Fetch only the Valid records from that session
+        cur.execute(
+            """
+            SELECT record_index, original_text, nsa_status
+            FROM nsa_session_results
+            WHERE session_id = %s AND nsa_status = 'Valid'
+            ORDER BY record_index
+            """,
+            (session["session_id"],),
+        )
+        rows = cur.fetchall()
+
+    return {
+        "found": True,
+        "sessionInfo": {
+            "totalRecords": session["total_records"],
+            "validRecords": session["valid_records"],
+            "suspiciousRecords": session["suspicious_records"],
+            "createdAt": (
+                session["created_at"].isoformat() if session["created_at"] else None
+            ),
+        },
+        "records": [
+            {"id": r["record_index"], "text": r["original_text"]} for r in rows
+        ],
+    }
+
+
 @app.post("/api/nsa/analyse", response_model=AnalyseResponse)
 def analyse(
     request: AnalyseRequest,
@@ -408,3 +463,71 @@ def analyse(
         print(f"[warn] Could not cache NSA session: {exc}")
 
     return result
+
+
+# ---------------------------------------------------------------------------
+# Routes — Sentiment analysis (protected)
+# ---------------------------------------------------------------------------
+
+
+class SentimentRequest(BaseModel):
+    """
+    Accepts a list of feedback strings that have already passed the NSA filter.
+    Only Valid records should be sent here.
+    """
+
+    texts: List[str]
+
+
+class SentimentItem(BaseModel):
+    id: int
+    originalText: str
+    label: str  # "Positive" | "Negative" | "Neutral"
+    confidence: float  # 0–100
+    model: str  # which classifier was used
+
+
+class SentimentResponse(BaseModel):
+    totalRecords: int
+    positiveCount: int
+    negativeCount: int
+    neutralCount: int
+    results: List[SentimentItem]
+
+
+@app.post("/api/sentiment/analyse", response_model=SentimentResponse)
+def sentiment_analyse(
+    request: SentimentRequest,
+    _current_user: dict = Depends(get_current_user),
+):
+    """
+    Run sentiment classification on a list of pre-filtered (Valid) feedback texts.
+
+    Each text is classified as Positive, Negative, or Neutral with a
+    confidence score. Uses HuggingFace DistilBERT when HF_API_TOKEN is set,
+    otherwise falls back to a lexicon-based classifier.
+    """
+    texts = [t.strip() for t in request.texts if t.strip()]
+    if not texts:
+        raise HTTPException(status_code=422, detail="No texts provided.")
+
+    classifications = classify_sentiment(texts)
+
+    results = [
+        SentimentItem(
+            id=idx + 1,
+            originalText=c.text,
+            label=c.label,
+            confidence=c.confidence,
+            model=c.model,
+        )
+        for idx, c in enumerate(classifications)
+    ]
+
+    return SentimentResponse(
+        totalRecords=len(results),
+        positiveCount=sum(1 for r in results if r.label == "Positive"),
+        negativeCount=sum(1 for r in results if r.label == "Negative"),
+        neutralCount=sum(1 for r in results if r.label == "Neutral"),
+        results=results,
+    )
