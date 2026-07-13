@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import {
   Alert, Box, Button, Chip, CircularProgress, Collapse,
   Container, Divider, LinearProgress, Paper, Snackbar,
-  Stack, TextField, Typography,
+  Stack, Table, TableBody, TableCell, TableContainer,
+  TableHead, TableRow, TextField, Typography,
 } from '@mui/material';
 import {
   BrainCircuit, CheckCircle2, ChevronDown, ChevronUp,
@@ -22,9 +23,6 @@ import type { SentimentItem, SentimentLabel } from '../types';
 
 const LABEL_COLORS: Record<SentimentLabel, string> = {
   Positive: '#22c55e', Negative: '#ef4444', Neutral: '#f59e0b',
-};
-const LABEL_BG: Record<SentimentLabel, string> = {
-  Positive: 'rgba(34,197,94,0.08)', Negative: 'rgba(239,68,68,0.08)', Neutral: 'rgba(245,158,11,0.08)',
 };
 const LABEL_ICONS: Record<SentimentLabel, React.ReactNode> = {
   Positive: <ThumbsUp size={14} />, Negative: <ThumbsDown size={14} />, Neutral: <Minus size={14} />,
@@ -239,16 +237,66 @@ export function SentimentPage() {
               </Collapse>
             </Paper>
 
-            {/* Results */}
+            {/* Results table */}
             {results.length > 0 && (
-              <Paper elevation={0} sx={{ p: 4, borderRadius: 5, bgcolor: 'white', border: '1px solid', borderColor: 'grey.200' }}>
-                <Stack spacing={1} sx={{ mb: 3 }}>
-                  <Typography variant="caption" sx={{ color: 'primary.main', textTransform: 'uppercase', letterSpacing: 1, fontWeight: 700 }}>Results</Typography>
-                  <Typography variant="h5" sx={{ fontWeight: 800 }}>Classified records</Typography>
-                </Stack>
-                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(2, 1fr)' }, gap: 2.5 }}>
-                  {results.map((item) => <ResultCard key={item.id} item={item} />)}
+              <Paper elevation={0} sx={{ borderRadius: 5, bgcolor: 'white', border: '1px solid', borderColor: 'grey.200', overflow: 'hidden' }}>
+                <Box sx={{ px: 4, pt: 4, pb: 2 }}>
+                  <Stack spacing={0.5}>
+                    <Typography variant="caption" sx={{ color: 'primary.main', textTransform: 'uppercase', letterSpacing: 1, fontWeight: 700 }}>Results</Typography>
+                    <Typography variant="h5" sx={{ fontWeight: 800 }}>Classified records</Typography>
+                  </Stack>
                 </Box>
+                <TableContainer>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow sx={{ bgcolor: '#f8fafc' }}>
+                        <TableCell sx={{ fontWeight: 700, color: 'text.secondary', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: 0.5, width: 60 }}>#</TableCell>
+                        <TableCell sx={{ fontWeight: 700, color: 'text.secondary', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: 0.5 }}>Feedback text</TableCell>
+                        <TableCell sx={{ fontWeight: 700, color: 'text.secondary', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: 0.5, width: 130 }}>Sentiment</TableCell>
+                        <TableCell sx={{ fontWeight: 700, color: 'text.secondary', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: 0.5, width: 180 }}>Confidence</TableCell>
+                        {/* <TableCell sx={{ fontWeight: 700, color: 'text.secondary', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: 0.5, width: 150 }}>Model</TableCell> */}
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {results.map((item) => {
+                        const color = LABEL_COLORS[item.label as SentimentLabel] ?? '#6366f1';
+                        return (
+                          <TableRow key={item.id} hover sx={{ '&:last-child td': { borderBottom: 0 } }}>
+                            <TableCell sx={{ color: 'text.disabled', fontWeight: 700, fontSize: '0.8rem' }}>
+                              {item.id}
+                            </TableCell>
+                            <TableCell sx={{ maxWidth: 400, fontSize: '0.88rem', color: 'text.primary', py: 1.5 }}>
+                              {item.originalText}
+                            </TableCell>
+                            <TableCell>
+                              <Chip
+                                icon={<Box sx={{ color, display: 'flex' }}>{LABEL_ICONS[item.label as SentimentLabel]}</Box>}
+                                label={item.label}
+                                size="small"
+                                sx={{ fontWeight: 700, bgcolor: `${color}12`, color, border: `1px solid ${color}30` }}
+                              />
+                            </TableCell>
+                            <TableCell sx={{ minWidth: 160 }}>
+                              <Stack spacing={0.5}>
+                                <Stack direction="row" sx={{ justifyContent: 'space-between' }}>
+                                  <Typography variant="caption" sx={{ fontWeight: 700, color }}>{item.confidence.toFixed(1)}%</Typography>
+                                </Stack>
+                                <LinearProgress
+                                  variant="determinate"
+                                  value={item.confidence}
+                                  sx={{ height: 5, borderRadius: 99, bgcolor: 'rgba(0,0,0,0.06)', '& .MuiLinearProgress-bar': { bgcolor: color } }}
+                                />
+                              </Stack>
+                            </TableCell>
+                           {/*  <TableCell>
+                              <Typography variant="caption" sx={{ color: 'text.disabled', fontFamily: 'monospace' }}>{item.model}</Typography>
+                            </TableCell> */}
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
               </Paper>
             )}
 
@@ -302,35 +350,6 @@ export function SentimentPage() {
         <Alert severity="error" onClose={() => setError(null)} sx={{ width: '100%' }}>{error}</Alert>
       </Snackbar>
     </Box>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Result card
-// ---------------------------------------------------------------------------
-
-function ResultCard({ item }: { item: SentimentItem }) {
-  const color = LABEL_COLORS[item.label as SentimentLabel] ?? '#6366f1';
-  const bg    = LABEL_BG[item.label as SentimentLabel]    ?? 'rgba(99,102,241,0.06)';
-  return (
-    <Paper elevation={0} sx={{ p: 2.5, borderRadius: 4, bgcolor: bg, border: '1px solid', borderColor: `${color}30`, transition: '0.2s', '&:hover': { transform: 'translateY(-3px)', boxShadow: 3 } }}>
-      <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-        <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary' }}>Record #{item.id}</Typography>
-        <Chip icon={<Box sx={{ color, display: 'flex' }}>{LABEL_ICONS[item.label as SentimentLabel]}</Box>} label={item.label} size="small"
-          sx={{ fontWeight: 700, bgcolor: `${color}15`, color, border: `1px solid ${color}30` }} />
-      </Stack>
-      <Typography sx={{ fontSize: '0.95rem', lineHeight: 1.8, mb: 2.5, fontStyle: 'italic', color: 'text.primary' }}>
-        "{item.originalText}"
-      </Typography>
-      <Stack spacing={0.75} sx={{ mb: 2 }}>
-        <Stack direction="row" sx={{ justifyContent: 'space-between' }}>
-          <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>Confidence</Typography>
-          <Typography variant="caption" sx={{ fontWeight: 700, color }}>{item.confidence.toFixed(1)}%</Typography>
-        </Stack>
-        <LinearProgress variant="determinate" value={item.confidence} sx={{ height: 7, borderRadius: 99, bgcolor: 'rgba(0,0,0,0.06)', '& .MuiLinearProgress-bar': { bgcolor: color } }} />
-      </Stack>
-      <Typography variant="caption" sx={{ color: 'text.disabled' }}>via {item.model}</Typography>
-    </Paper>
   );
 }
 
