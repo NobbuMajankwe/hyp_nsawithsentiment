@@ -56,7 +56,7 @@ const NAV_ITEMS: NavItem[] = [
     page: "sentiment",
     icon: <BrainCircuit size={18} />,
     label: "Sentiment",
-    sublabel: "Coming soon",
+    sublabel: "Classify sentiment",
   },
   {
     page: "insight",
