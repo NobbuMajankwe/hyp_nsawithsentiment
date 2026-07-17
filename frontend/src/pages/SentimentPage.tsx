@@ -209,7 +209,7 @@ export function SentimentPage() {
           "classify_sentiment()",
           "score_confidence()",
         ]}
-        statusLine="STATUS → Sentiment engine online and ready for validated feedback"
+        statusLine="STATUS -> Sentiment engine online and ready for validated feedback"
       />
 
       <PipelineTracker

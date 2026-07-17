@@ -10,17 +10,17 @@ random detectors that cover the non-self space, then flag any feedback that
 matches a detector as anomalous.
 
 Pipeline:
-  1. Preprocess   → lowercase, strip punctuation, collapse whitespace
-  2. Tokenise     → split on whitespace, remove stopwords
-  3. Vectorise    → build a simple bag-of-words vocabulary; each text becomes
+  1. Preprocess   -> lowercase, strip punctuation, collapse whitespace
+  2. Tokenise     -> split on whitespace, remove stopwords
+  3. Vectorise    -> build a simple bag-of-words vocabulary; each text becomes
                     a fixed-length binary/frequency vector (no sklearn)
-  4. Self space   → normal training samples define the self region
-  5. Detectors    → random candidates rejected if they land inside self space
+  4. Self space   -> normal training samples define the self region
+  5. Detectors    -> random candidates rejected if they land inside self space
                     (distance < self_match_threshold)
-  6. Detection    → each input vector is tested against all detectors;
+  6. Detection    -> each input vector is tested against all detectors;
                     if ANY detector matches (distance <= detector_radius) the
                     record is flagged as Suspicious
-  7. Scoring      → anomaly score = max(0, 1 − closest_detector_distance),
+  7. Scoring      -> anomaly score = max(0, 1 − closest_detector_distance),
                     scaled to 0–100 integer
 """
 
@@ -110,20 +110,62 @@ STOP_WORDS: set[str] = {
     "also",
 }
 
-# "Normal" feedback samples used to define the self space during training.
-# These represent genuine, well-formed event feedback patterns.
-NORMAL_FEEDBACK_CORPUS: list[str] = [
-    "The event was well organised and the speakers were informative.",
-    "I enjoyed the networking session and the venue was comfortable.",
-    "The workshop was useful and the registration process was smooth.",
-    "The event content was relevant and professionally delivered.",
-    "The panel discussion was helpful and the staff were friendly.",
-    "The session started on time and the information was clear.",
-    "Really good presentations and well managed schedule.",
-    "The keynote speaker was excellent and the venue was accessible.",
-    "Registration was quick and the sessions were well structured.",
-    "Enjoyed the interactive segments and the quality of the presenters.",
-]
+
+# ---------------------------------------------------------------------------
+# Helper function to load normal corpus from database
+# ---------------------------------------------------------------------------
+
+
+def load_normal_corpus_from_db() -> list[str]:
+    """
+    Load the normal feedback corpus from the database.
+
+    Returns the raw_text of all feedback records from the
+    'NSA Normal Feedback Corpus' training dataset.
+
+    Raises:
+        RuntimeError: If the corpus is not found in the database.
+    """
+    with get_cursor() as cur:
+        # Get the training dataset
+        cur.execute(
+            """
+            SELECT dataset_id
+            FROM datasets
+            WHERE source_name = 'NORMAL_FEEDBACK_SAMPLES'
+            AND source_type = 'JSON'
+        """
+        )
+
+        dataset = cur.fetchone()
+        if not dataset:
+            raise RuntimeError(
+                "Normal feedback corpus not found in database. "
+                "Please upload sample dataset first."
+            )
+
+        dataset_id = dataset["dataset_id"]
+
+        # Get all feedback records for this dataset
+        cur.execute(
+            """
+            SELECT raw_text
+            FROM feedback_records
+            WHERE dataset_id = %s
+            ORDER BY feedback_id
+        """,
+            (dataset_id,),
+        )
+
+        records = cur.fetchall()
+
+        if not records:
+            raise RuntimeError(
+                "Normal feedback corpus dataset exists but has no records. "
+                "Please upload sample dataset first."
+            )
+
+        return [record["raw_text"] for record in records]
 
 
 # ---------------------------------------------------------------------------
@@ -187,10 +229,10 @@ def preprocess(text: str) -> str:
     Lowercase, remove punctuation, collapse multiple whitespace into one.
 
     Example:
-        "BUY NOW!! CLICK FREE$$$" → "buy now  click free"
+        "BUY NOW!! CLICK FREE$$$" -> "buy now  click free"
     """
     text = text.lower()
-    # Replace punctuation with space so "free!" → "free "
+    # Replace punctuation with space so "free!" -> "free "
     text = text.translate(
         str.maketrans(string.punctuation, " " * len(string.punctuation))
     )
@@ -320,7 +362,7 @@ class NegativeSelectionAlgorithm:
         # Step 1 — vocabulary from normal samples
         self.vocabulary = build_vocabulary(normal_corpus)
 
-        # Step 2 — vectorise normal samples → self space
+        # Step 2 — vectorise normal samples -> self space
         self.self_vectors = [
             text_to_vector(text, self.vocabulary) for text in normal_corpus
         ]
@@ -357,7 +399,7 @@ class NegativeSelectionAlgorithm:
             )
 
             if min_dist_to_self > self.self_match_threshold:
-                # Candidate is in non-self space → accept as detector
+                # Candidate is in non-self space -> accept as detector
                 detector = Detector(
                     detector_id=len(self.detectors) + 1,
                     vector=candidate,
@@ -407,7 +449,7 @@ class NegativeSelectionAlgorithm:
 
         if matched_distances:
             closest = min(matched_distances)
-            # Score: closer to detector centre → higher anomaly score
+            # Score: closer to detector centre -> higher anomaly score
             raw_score = max(0.0, 1.0 - closest)
             anomaly_score = round(raw_score * 100)
             return NSAResult(
@@ -420,7 +462,7 @@ class NegativeSelectionAlgorithm:
                 anomaly_reason="Matched NSA detector — pattern deviates from normal feedback",
             )
 
-        # No detector matched → check for zero-vector (fully OOV text)
+        # No detector matched -> check for zero-vector (fully OOV text)
         if all(v == 0.0 for v in feature_vector):
             return NSAResult(
                 id=record_id,
@@ -556,11 +598,19 @@ _nsa_instance: Optional[NegativeSelectionAlgorithm] = None
 
 def get_nsa() -> NegativeSelectionAlgorithm:
     """
-    Return a trained NSA singleton. Trains on first call using the built-in
-    normal feedback corpus. Subsequent calls return the cached instance.
+    Return a trained NSA singleton.
+
+    Loads normal feedback corpus from the database and trains on first call.
+    Subsequent calls return the cached instance.
+
+    Raises:
+        RuntimeError: If the normal corpus is not found in the database.
     """
     global _nsa_instance
     if _nsa_instance is None:
+        # Load normal corpus from database
+        normal_corpus = load_normal_corpus_from_db()
+
         _nsa_instance = NegativeSelectionAlgorithm(
             detector_count=60,
             detector_radius=0.55,
@@ -568,5 +618,5 @@ def get_nsa() -> NegativeSelectionAlgorithm:
             max_attempts=5000,
             random_seed=42,
         )
-        _nsa_instance.train(NORMAL_FEEDBACK_CORPUS)
+        _nsa_instance.train(normal_corpus)
     return _nsa_instance

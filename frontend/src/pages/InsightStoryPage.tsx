@@ -209,7 +209,7 @@ export function InsightStoryPage() {
                 fontFamily: "monospace",
               }}
             >
-              STATUS → awaiting sentiment engine integration...
+              {"STATUS -> awaiting sentiment engine integration..."}
             </Typography>
           </Box>
         </Paper>
@@ -470,7 +470,7 @@ export function InsightStoryPage() {
               fontFamily: "monospace",
             }}
           >
-            STATUS → report_generator.awaiting_model_output()
+            {"STATUS -> report_generator.awaiting_model_output()"}
           </Typography>
         </Paper>
       </Container>

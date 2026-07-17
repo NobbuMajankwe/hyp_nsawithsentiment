@@ -3,7 +3,7 @@ import type { AnalysisResult } from '../types';
 import type { AuthUser } from '../types/auth';
 //import type { AuthUser } from '../context/AuthContext';
 
-const BASE_URL = ''; // Vite proxies /api/* → localhost:8000
+const BASE_URL = ''; // Vite proxies /api/* -> localhost:8000
 
 // ---------------------------------------------------------------------------
 // Axios instance with a 401 interceptor

@@ -6,6 +6,10 @@ Endpoints:
   POST /api/auth/login     — obtain a JWT
   GET  /api/auth/me        — return current user from token
   POST /api/nsa/analyse    — run NSA analysis (requires valid JWT)
+  POST /api/datasets/upload — upload CSV/JSON dataset
+  GET  /api/datasets       — list user's datasets
+  GET  /api/datasets/{id}  — get dataset details
+  DELETE /api/datasets/{id} — delete a dataset
 
 Run with:
     uvicorn main:app --reload --port 8000
@@ -13,7 +17,8 @@ Run with:
 
 import hashlib
 import json as _json
-from fastapi import Depends, FastAPI, HTTPException, status
+import os
+from fastapi import Depends, FastAPI, HTTPException, status, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
@@ -29,6 +34,16 @@ from auth import (
 )
 from database import init_db, get_cursor
 from sentiment import classify_sentiment
+from dataset_handler import (
+    parse_csv_file,
+    parse_json_file,
+    save_dataset_to_db,
+    get_user_datasets,
+    get_dataset_by_id,
+    get_dataset_feedback,
+    delete_dataset,
+    DatasetParseError,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -141,6 +156,10 @@ app = FastAPI(
     version="0.3.0",
 )
 
+router = APIRouter(
+    prefix="/users",
+    tags=["users"], # Groups endpoints in Swagger/OpenAPI docs
+)
 
 @app.on_event("startup")
 def on_startup():
@@ -243,6 +262,80 @@ class AnalyseResponse(BaseModel):
     suspiciousRecords: int
     results: List[ResultItem]
     cached: bool = False
+
+
+# ---------------------------------------------------------------------------
+# Datasets schemas
+# ---------------------------------------------------------------------------
+class DatasetInfo(BaseModel):
+    id: int
+    name: str
+    type: str
+    description: Optional[str]
+    totalRecords: int
+    status: str
+    uploadedAt: Optional[str]
+
+
+class DatasetListResponse(BaseModel):
+    total: int
+    datasets: List[DatasetInfo]
+
+
+class DatasetDetailResponse(BaseModel):
+    id: int
+    name: str
+    type: str
+    description: Optional[str]
+    totalRecords: int
+    status: str
+    uploadedBy: Optional[str]
+    uploadedAt: Optional[str]
+
+
+class FeedbackRecord(BaseModel):
+    id: int
+    text: str
+    cleanedText: Optional[str]
+    isValid: bool
+    isAnomalous: bool
+    createdAt: Optional[str]
+
+
+class DatasetFeedbackResponse(BaseModel):
+    datasetId: int
+    total: int
+    records: List[FeedbackRecord]
+
+
+# ---------------------------------------------------------------------------
+# Sentiment schemas
+# ---------------------------------------------------------------------------
+
+
+class SentimentRequest(BaseModel):
+    """
+    Accepts a list of feedback strings that have already passed the NSA filter.
+    Only Valid records should be sent here.
+    """
+
+    texts: List[str]
+
+
+class SentimentItem(BaseModel):
+    id: int
+    originalText: str
+    label: str  # "Positive" | "Negative" | "Neutral"
+    confidence: float  # 0–100
+    model: str  # which classifier was used
+
+
+class SentimentResponse(BaseModel):
+    totalRecords: int
+    positiveCount: int
+    negativeCount: int
+    neutralCount: int
+    results: List[SentimentItem]
 
 
 # ---------------------------------------------------------------------------
@@ -470,31 +563,6 @@ def analyse(
 # ---------------------------------------------------------------------------
 
 
-class SentimentRequest(BaseModel):
-    """
-    Accepts a list of feedback strings that have already passed the NSA filter.
-    Only Valid records should be sent here.
-    """
-
-    texts: List[str]
-
-
-class SentimentItem(BaseModel):
-    id: int
-    originalText: str
-    label: str  # "Positive" | "Negative" | "Neutral"
-    confidence: float  # 0–100
-    model: str  # which classifier was used
-
-
-class SentimentResponse(BaseModel):
-    totalRecords: int
-    positiveCount: int
-    negativeCount: int
-    neutralCount: int
-    results: List[SentimentItem]
-
-
 @app.post("/api/sentiment/analyse", response_model=SentimentResponse)
 def sentiment_analyse(
     request: SentimentRequest,
@@ -531,3 +599,233 @@ def sentiment_analyse(
         neutralCount=sum(1 for r in results if r.label == "Neutral"),
         results=results,
     )
+
+
+# ---------------------------------------------------------------------------
+# Routes — Dataset management (protected)
+# ---------------------------------------------------------------------------
+
+
+@app.post("/api/datasets/upload", status_code=201)
+async def upload_dataset(
+    file: UploadFile = File(...),
+    name: Optional[str] = Form(None),
+    description: Optional[str] = Form(None),
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Upload a dataset file (CSV or JSON) containing feedback records.
+
+    File formats supported:
+
+    CSV:
+    - Must have headers
+    - Looks for columns: 'feedback', 'text', 'comment', 'review', etc.
+    - Falls back to first column if no standard column found
+
+    JSON:
+    - Array of strings: ["feedback 1", "feedback 2"]
+    - Array of objects: [{"text": "feedback 1"}, ...]
+    - Object with array: {"feedback": ["text 1", "text 2"]}
+
+    Returns:
+        Dataset ID and summary information
+    """
+    user_id = current_user["sub"]
+
+    # Validate file type
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No file provided")
+
+    filename = file.filename.lower()
+
+    if filename.endswith(".csv"):
+        source_type = "CSV"
+    elif filename.endswith(".json"):
+        source_type = "JSON"
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported file type. Please upload a CSV or JSON file.",
+        )
+
+    # Read file content
+    try:
+        content = await file.read()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to read file: {str(e)}")
+
+    # Validate file size (max 10MB)
+    if len(content) > 10 * 1024 * 1024:
+        raise HTTPException(
+            status_code=413, detail="File too large. Maximum size is 10MB."
+        )
+
+    # Parse the file
+    try:
+        if source_type == "CSV":
+            feedback_texts = parse_csv_file(content)
+        else:  # JSON
+            feedback_texts = parse_json_file(content)
+    except DatasetParseError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    # Validate we have feedback
+    if not feedback_texts:
+        raise HTTPException(
+            status_code=422, detail="No valid feedback records found in file"
+        )
+
+    # Use provided name or default to filename
+    dataset_name = name or file.filename
+
+    # Save to database
+    try:
+        dataset_id = save_dataset_to_db(
+            user_id=user_id,
+            source_name=dataset_name,
+            source_type=source_type,
+            feedback_texts=feedback_texts,
+            file_path=file.filename,
+            description=description,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save dataset: {str(e)}")
+
+    return {
+        "message": "Dataset uploaded successfully",
+        "datasetId": dataset_id,
+        "name": dataset_name,
+        "type": source_type,
+        "totalRecords": len(feedback_texts),
+    }
+
+
+@app.get("/api/datasets", response_model=DatasetListResponse)
+def list_datasets(
+    limit: int = 50,
+    offset: int = 0,
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    List all datasets uploaded by the current user.
+
+    Query parameters:
+    - limit: Maximum number of datasets to return (default: 50)
+    - offset: Number of datasets to skip for pagination (default: 0)
+    """
+    user_id = current_user["sub"]
+
+    try:
+        datasets = get_user_datasets(user_id, limit, offset)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to retrieve datasets: {str(e)}"
+        )
+
+    return DatasetListResponse(
+        total=len(datasets), datasets=[DatasetInfo(**d) for d in datasets]
+    )
+
+
+@app.get("/api/datasets/{dataset_id}", response_model=DatasetDetailResponse)
+def get_dataset(
+    dataset_id: int,
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Get detailed information about a specific dataset.
+
+    Only the user who uploaded the dataset can view it.
+    """
+    user_id = current_user["sub"]
+
+    try:
+        dataset = get_dataset_by_id(dataset_id, user_id)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to retrieve dataset: {str(e)}"
+        )
+
+    if not dataset:
+        raise HTTPException(
+            status_code=404,
+            detail="Dataset not found or you don't have permission to view it",
+        )
+
+    return DatasetDetailResponse(**dataset)
+
+
+@app.get("/api/datasets/{dataset_id}/feedback", response_model=DatasetFeedbackResponse)
+def get_dataset_feedback_records(
+    dataset_id: int,
+    limit: int = 100,
+    offset: int = 0,
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Get feedback records from a specific dataset.
+
+    Query parameters:
+    - limit: Maximum number of records to return (default: 100)
+    - offset: Number of records to skip for pagination (default: 0)
+
+    Only the user who uploaded the dataset can view its records.
+    """
+    user_id = current_user["sub"]
+
+    # Verify user owns this dataset
+    try:
+        dataset = get_dataset_by_id(dataset_id, user_id)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to verify dataset: {str(e)}"
+        )
+
+    if not dataset:
+        raise HTTPException(
+            status_code=404,
+            detail="Dataset not found or you don't have permission to view it",
+        )
+
+    # Get feedback records
+    try:
+        records = get_dataset_feedback(dataset_id, limit, offset)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to retrieve feedback records: {str(e)}"
+        )
+
+    return DatasetFeedbackResponse(
+        datasetId=dataset_id,
+        total=len(records),
+        records=[FeedbackRecord(**r) for r in records],
+    )
+
+
+@app.delete("/api/datasets/{dataset_id}")
+def delete_dataset_endpoint(
+    dataset_id: int,
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Delete a dataset and all its associated feedback records.
+
+    Only the user who uploaded the dataset can delete it.
+    """
+    user_id = current_user["sub"]
+
+    try:
+        success = delete_dataset(dataset_id, user_id)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to delete dataset: {str(e)}"
+        )
+
+    if not success:
+        raise HTTPException(
+            status_code=404,
+            detail="Dataset not found or you don't have permission to delete it",
+        )
+
+    return {"message": "Dataset deleted successfully", "datasetId": dataset_id}

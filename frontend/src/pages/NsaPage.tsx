@@ -8,7 +8,7 @@ import { InputPanel } from "../components/InputPanel";
 import { FeedbackCanvas } from "../components/FeedbackCanvas";
 import { FindingsPanel } from "../components/FindingsPanel";
 import { PipelineTracker } from "../components/PipelineTracker";
-import { AnalyticsCharts } from "../components/AnalyticsCharts";
+//import { AnalyticsCharts } from "../components/AnalyticsCharts";
 
 import { SAMPLE_TEXT } from "../data/mockFeedback";
 import { buildSteps } from "../data/pipelineSteps";
@@ -57,7 +57,7 @@ export function NsaPage() {
         title={<>&gt; NSA_Feedback_Filter<span style={{ color: "#22d3ee" }}>.</span></>}
         description="The Negative Selection Algorithm preprocesses feedback records, identifies anomalous or suspicious input, and allows only valid records to continue into the sentiment-analysis pipeline."
         chips={["load_feedback_records()", "preprocess_input()", "detect_anomalies()", "queue_valid_records()"]}
-        statusLine="STATUS → NSA engine online and ready for dataset input"
+        statusLine="STATUS -> NSA engine online and ready for dataset input"
       />
 
       <PipelineTracker
@@ -80,7 +80,7 @@ export function NsaPage() {
             <InputPanel value={datasetText} onChange={setDatasetText} onRun={handleRun} onReset={handleReset} loading={loading} />
           </Box>
           <FeedbackCanvas results={results} />
-          {results.length > 0 && <AnalyticsCharts results={results} />}
+         {/* {results.length > 1000 && <AnalyticsCharts results={results} />} */}
         </Stack>
 
         <Box sx={{ position: { xl: "sticky" }, top: 24 }}>
