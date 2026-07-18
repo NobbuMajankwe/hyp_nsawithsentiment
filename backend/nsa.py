@@ -35,81 +35,52 @@ from database import get_cursor
 import json
 
 # ---------------------------------------------------------------------------
-# Constants
+# Constants - # Helper function to load stop words from database
 # ---------------------------------------------------------------------------
 
-STOP_WORDS: set[str] = {
-    "the",
-    "a",
-    "an",
-    "and",
-    "or",
-    "but",
-    "in",
-    "on",
-    "at",
-    "to",
-    "for",
-    "of",
-    "with",
-    "by",
-    "from",
-    "is",
-    "was",
-    "are",
-    "were",
-    "be",
-    "been",
-    "has",
-    "have",
-    "had",
-    "do",
-    "did",
-    "does",
-    "will",
-    "would",
-    "could",
-    "should",
-    "may",
-    "might",
-    "it",
-    "its",
-    "this",
-    "that",
-    "these",
-    "those",
-    "i",
-    "we",
-    "you",
-    "he",
-    "she",
-    "they",
-    "me",
-    "us",
-    "him",
-    "her",
-    "them",
-    "my",
-    "our",
-    "your",
-    "his",
-    "their",
-    "what",
-    "which",
-    "who",
-    "whom",
-    "not",
-    "no",
-    "so",
-    "as",
-    "if",
-    "than",
-    "then",
-    "very",
-    "just",
-    "also",
-}
+def load_stopawords_from_db() -> set[str]:
+    """
+    Load stop words from the database.
+    """
+    with get_cursor() as cur:
+        cur.execute(
+            """
+            SELECT dataset_id
+            FROM datasets
+            WHERE source_name = 'STOP_WORDS_SAMPLES'
+            AND source_type = 'JSON'
+            """
+        )
+        # rows = cur.fetchone()
+        dataset = cur.fetchone()
+        if not dataset:
+            raise RuntimeError(
+                "Stop words not found in database. "
+                "Please upload sample dataset first."
+            )
 
+        dataset_id = dataset["dataset_id"]
+
+        # Get all feedback records for this dataset
+        cur.execute(
+            """
+            SELECT raw_text
+            FROM feedback_records
+            WHERE dataset_id = %s
+            ORDER BY feedback_id
+        """,
+            (dataset_id,),
+        )
+
+        records = cur.fetchall()
+
+        if not records:
+            raise RuntimeError(
+                "Stop words dataset exists but has no records. "
+                "Please upload sample dataset first."
+            )
+
+        return [record["raw_text"] for record in records]
 
 # ---------------------------------------------------------------------------
 # Helper function to load normal corpus from database
@@ -171,7 +142,6 @@ def load_normal_corpus_from_db() -> list[str]:
 # ---------------------------------------------------------------------------
 # Data classes
 # ---------------------------------------------------------------------------
-
 
 @dataclass
 class Detector:
@@ -247,10 +217,11 @@ def tokenise(text: str) -> list[str]:
     tokens shorter than 2 characters.
     """
     cleaned = preprocess(text)
+    stop_words = load_stopawords_from_db()
     tokens = [
         token
         for token in cleaned.split()
-        if token not in STOP_WORDS and len(token) >= 2
+        if token not in stop_words and len(token) >= 2
     ]
     return tokens
 

@@ -17,8 +17,16 @@ Run with:
 
 import hashlib
 import json as _json
-import os
-from fastapi import Depends, FastAPI, HTTPException, status, UploadFile, File, Form
+from fastapi import (
+    APIRouter,
+    Depends,
+    FastAPI,
+    HTTPException,
+    status,
+    UploadFile,
+    File,
+    Form,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
@@ -156,10 +164,24 @@ app = FastAPI(
     version="0.3.0",
 )
 
-router = APIRouter(
-    prefix="/users",
-    tags=["users"], # Groups endpoints in Swagger/OpenAPI docs
+auth_router = APIRouter(
+    prefix="/api/auth",
+    tags=["Authentication"],
 )
+datasets_router = APIRouter(
+    prefix="/api/datasets",
+    tags=["Datasets"],
+)
+nsa_router = APIRouter(
+    prefix="/api/nsa",
+    tags=["NSA Analysis"],
+)
+
+sentiment_router = APIRouter(
+    prefix="/api/sentiment",
+    tags=["Sentiment Analysis"],
+)
+
 
 @app.on_event("startup")
 def on_startup():
@@ -370,7 +392,7 @@ def health_check():
 # ---------------------------------------------------------------------------
 
 
-@app.post("/api/auth/register", response_model=AuthResponse, status_code=201)
+@auth_router.post("/register", response_model=AuthResponse, status_code=201)
 def register(body: RegisterRequest):
     try:
         user = create_user(
@@ -395,7 +417,7 @@ def register(body: RegisterRequest):
     )
 
 
-@app.post("/api/auth/login", response_model=AuthResponse)
+@auth_router.post("/login", response_model=AuthResponse)
 def login(body: LoginRequest):
     user = authenticate_user(body.email, body.password)
 
@@ -418,7 +440,7 @@ def login(body: LoginRequest):
     )
 
 
-@app.get("/api/auth/me", response_model=UserOut)
+@auth_router.get("/me", response_model=UserOut)
 def me(current_user: dict = Depends(get_current_user)):
     user = get_user_by_id(current_user["sub"])
 
@@ -433,7 +455,7 @@ def me(current_user: dict = Depends(get_current_user)):
     )
 
 
-@app.post("/api/auth/reset-password")
+@auth_router.post("/reset-password")
 def reset_password(body: ResetPasswordRequest):
     try:
         success = reset_user_password(
@@ -459,7 +481,7 @@ def reset_password(body: ResetPasswordRequest):
 # ---------------------------------------------------------------------------
 
 
-@app.get("/api/nsa/latest-valid")
+@nsa_router.get("/latest-valid")
 def get_latest_valid_records(current_user: dict = Depends(get_current_user)):
     """
     Return the Valid (non-suspicious) records from the user's most recent
@@ -513,7 +535,7 @@ def get_latest_valid_records(current_user: dict = Depends(get_current_user)):
     }
 
 
-@app.post("/api/nsa/analyse", response_model=AnalyseResponse)
+@nsa_router.post("/analyse", response_model=AnalyseResponse)
 def analyse(
     request: AnalyseRequest,
     current_user: dict = Depends(get_current_user),
@@ -563,7 +585,7 @@ def analyse(
 # ---------------------------------------------------------------------------
 
 
-@app.post("/api/sentiment/analyse", response_model=SentimentResponse)
+@sentiment_router.post("/analyse", response_model=SentimentResponse)
 def sentiment_analyse(
     request: SentimentRequest,
     _current_user: dict = Depends(get_current_user),
@@ -606,7 +628,7 @@ def sentiment_analyse(
 # ---------------------------------------------------------------------------
 
 
-@app.post("/api/datasets/upload", status_code=201)
+@datasets_router.post("/upload", status_code=201)
 async def upload_dataset(
     file: UploadFile = File(...),
     name: Optional[str] = Form(None),
@@ -701,7 +723,7 @@ async def upload_dataset(
     }
 
 
-@app.get("/api/datasets", response_model=DatasetListResponse)
+@datasets_router.get("", response_model=DatasetListResponse)
 def list_datasets(
     limit: int = 50,
     offset: int = 0,
@@ -728,7 +750,7 @@ def list_datasets(
     )
 
 
-@app.get("/api/datasets/{dataset_id}", response_model=DatasetDetailResponse)
+@datasets_router.get("/{dataset_id}", response_model=DatasetDetailResponse)
 def get_dataset(
     dataset_id: int,
     current_user: dict = Depends(get_current_user),
@@ -756,7 +778,7 @@ def get_dataset(
     return DatasetDetailResponse(**dataset)
 
 
-@app.get("/api/datasets/{dataset_id}/feedback", response_model=DatasetFeedbackResponse)
+@datasets_router.get("/{dataset_id}/feedback", response_model=DatasetFeedbackResponse)
 def get_dataset_feedback_records(
     dataset_id: int,
     limit: int = 100,
@@ -803,7 +825,7 @@ def get_dataset_feedback_records(
     )
 
 
-@app.delete("/api/datasets/{dataset_id}")
+@datasets_router.delete("/{dataset_id}")
 def delete_dataset_endpoint(
     dataset_id: int,
     current_user: dict = Depends(get_current_user),
@@ -829,3 +851,13 @@ def delete_dataset_endpoint(
         )
 
     return {"message": "Dataset deleted successfully", "datasetId": dataset_id}
+
+
+# ---------------------------------------------------------------------------
+# Register routers
+# ---------------------------------------------------------------------------
+
+app.include_router(auth_router)
+app.include_router(datasets_router)
+app.include_router(nsa_router)
+app.include_router(sentiment_router)
