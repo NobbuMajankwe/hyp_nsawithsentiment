@@ -14,6 +14,7 @@ import {
   TableHead,
   TableRow,
   Typography,
+  TablePagination,
 } from "@mui/material";
 import {
   ChevronDown,
@@ -50,7 +51,22 @@ export function FeedbackCanvas({ results }: Props) {
       </Paper>
     );
   } */
- if (results.length === 0) {
+ 
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
+
+  const handleChangePage = (_: unknown, newPage: number) => {
+    setPage(newPage);
+  };
+
+  const handleChangeRowsPerPage = (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    setRowsPerPage(parseInt(event.target.value, 10));
+    setPage(0);
+  };
+
+  if (results.length === 0) {
     return (
       <Paper
         elevation={0}
@@ -143,12 +159,51 @@ export function FeedbackCanvas({ results }: Props) {
           </TableHead>
 
           <TableBody>
-            {results.map((item) => (
-              <ExpandableRecordRow key={item.id} item={item} />
-            ))}
+            {results
+              .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+              .map((item) => (
+                <ExpandableRecordRow key={item.id} item={item} />
+              ))}
           </TableBody>
         </Table>
       </TableContainer>
+      <TablePagination
+        component="div"
+        count={results.length}
+        page={page}
+        onPageChange={handleChangePage}
+        rowsPerPage={rowsPerPage}
+        onRowsPerPageChange={handleChangeRowsPerPage}
+        rowsPerPageOptions={[5, 10, 25, 50]}
+        sx={{
+          bgcolor: "#020617",
+          color: "#cbd5e1",
+          borderTop: "1px solid rgba(148,163,184,0.18)",
+
+          "& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows":
+            {
+              color: "#94a3b8",
+              fontFamily: "monospace",
+            },
+
+          "& .MuiSelect-select": {
+            color: "#22d3ee",
+            fontFamily: "monospace",
+          },
+
+          "& .MuiSvgIcon-root": {
+            color: "#22d3ee",
+          },
+
+          "& .MuiIconButton-root": {
+            color: "#22d3ee",
+          },
+
+          "& .Mui-disabled": {
+            color: "#475569",
+          },
+        }}
+      />
     </Paper>
   );
 }
@@ -164,13 +219,9 @@ function ExpandableRecordRow({ item }: { item: AnalysisResult }) {
         onClick={() => setOpen((value) => !value)}
         sx={{
           cursor: "pointer",
-          bgcolor: suspicious
-            ? "rgba(127,29,29,0.25)"
-            : "rgba(6,78,59,0.14)",
+          bgcolor: suspicious ? "rgba(127,29,29,0.25)" : "rgba(6,78,59,0.14)",
           "&:hover": {
-            bgcolor: suspicious
-              ? "rgba(127,29,29,0.38)"
-              : "rgba(6,78,59,0.24)",
+            bgcolor: suspicious ? "rgba(127,29,29,0.38)" : "rgba(6,78,59,0.24)",
           },
         }}
       >
@@ -211,11 +262,7 @@ function ExpandableRecordRow({ item }: { item: AnalysisResult }) {
         <TableCell sx={{ borderBottom: "1px solid rgba(148,163,184,0.12)" }}>
           <Chip
             icon={
-              suspicious ? (
-                <ShieldAlert size={14} />
-              ) : (
-                <ShieldCheck size={14} />
-              )
+              suspicious ? <ShieldAlert size={14} /> : <ShieldCheck size={14} />
             }
             label={item.nsaStatus}
             size="small"
@@ -240,7 +287,7 @@ function ExpandableRecordRow({ item }: { item: AnalysisResult }) {
             borderBottom: "1px solid rgba(148,163,184,0.12)",
           }}
         >
-          <Stack direction="row" spacing={1.5} sx={{alignItems:"center"}}>
+          <Stack direction="row" spacing={1.5} sx={{ alignItems: "center" }}>
             <Typography sx={{ color: "#f8fafc", fontWeight: 900 }}>
               {item.anomalyScore}%
             </Typography>
@@ -268,9 +315,7 @@ function ExpandableRecordRow({ item }: { item: AnalysisResult }) {
           colSpan={5}
           sx={{
             p: 0,
-            borderBottom: open
-              ? "1px solid rgba(148,163,184,0.14)"
-              : "none",
+            borderBottom: open ? "1px solid rgba(148,163,184,0.14)" : "none",
             bgcolor: "#020617",
           }}
         >
@@ -312,7 +357,12 @@ function ExpandableRecordRow({ item }: { item: AnalysisResult }) {
                     Tokens
                   </Typography>
 
-                  <Stack direction="row" spacing={0.7} sx={{ flexWrap:"wrap"}} useFlexGap>
+                  <Stack
+                    direction="row"
+                    spacing={0.7}
+                    sx={{ flexWrap: "wrap" }}
+                    useFlexGap
+                  >
                     {item.tokens.length > 0 ? (
                       item.tokens.map((token) => (
                         <Chip
