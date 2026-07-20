@@ -89,7 +89,7 @@ function Dashboard() {
         }}
       >
         {page === "profile" && <ProfilePage />}
-        {page === "dashboard" && <Dashboard2 />}
+        {page === "dashboard" && <Dashboard2 onNavigate={setPage} />}
         {page === "nsa" && <NsaPage />}
         {page === "sentiment" && <SentimentPage />}
         {page === "insight" && <InsightStoryPage />}

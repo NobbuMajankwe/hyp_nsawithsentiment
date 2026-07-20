@@ -127,3 +127,40 @@ export async function runSentimentAnalysis(
   );
   return data;
 }
+
+// ---------------------------------------------------------------------------
+// Dashboard summary (requires token)
+// ---------------------------------------------------------------------------
+
+export interface DashboardActivity {
+  eventType: 'nsa_scan' | 'dataset_loaded' | 'account_created';
+  title: string;
+  detail: string;
+  createdAt: string | null;
+}
+
+export interface DashboardSummary {
+  datasetCount: number;
+  totalFeedback: number;
+  nsaTotalRecords: number;
+  nsaValidRecords: number;
+  nsaSuspiciousRecords: number;
+  nsaPassRate: number;
+  nsaSessionCount: number;
+  sentimentCount: number;
+  donutData: { name: string; value: number }[];
+  pipeline: {
+    datasetLoaded: boolean;
+    nsaRun: boolean;
+    sentimentRun: boolean;
+  };
+  nsaRunAt: string | null;
+  activity: DashboardActivity[];
+}
+
+export async function fetchDashboardSummary(token: string): Promise<DashboardSummary> {
+  const { data } = await apiClient.get<DashboardSummary>('/api/dashboard/summary', {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return data;
+}

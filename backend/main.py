@@ -854,6 +854,167 @@ def delete_dataset_endpoint(
 
 
 # ---------------------------------------------------------------------------
+# Routes — Dashboard summary (protected)
+# ---------------------------------------------------------------------------
+
+dashboard_router = APIRouter(
+    prefix="/api/dashboard",
+    tags=["Dashboard"],
+)
+
+
+@dashboard_router.get("/summary")
+def dashboard_summary(current_user: dict = Depends(get_current_user)):
+    """
+    Return a single aggregated payload for the dashboard.
+
+    Includes:
+    - Dataset counts and total feedback records for this user
+    - Latest NSA session stats (totalRecords, validRecords, suspiciousRecords)
+    - Last 8 activity events derived from real DB rows
+    - Pipeline stage statuses
+    """
+    user_id = current_user["sub"]
+
+    with get_cursor() as cur:
+        # ── Dataset stats ──────────────────────────────────────────────────
+        cur.execute(
+            """
+            SELECT
+                COUNT(*)                        AS dataset_count,
+                COALESCE(SUM(total_records), 0) AS total_feedback
+            FROM datasets
+            WHERE loaded_by = %s
+            """,
+            (user_id,),
+        )
+        ds = cur.fetchone()
+
+        dataset_count = int(ds["dataset_count"])
+        total_feedback = int(ds["total_feedback"])
+
+        # ── Latest NSA session ─────────────────────────────────────────────
+        cur.execute(
+            """
+            SELECT total_records, valid_records, suspicious_records, created_at
+            FROM nsa_sessions
+            WHERE user_id = %s
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            (user_id,),
+        )
+        nsa = cur.fetchone()
+
+        nsa_total = int(nsa["total_records"]) if nsa else 0
+        nsa_valid = int(nsa["valid_records"]) if nsa else 0
+        nsa_suspicious = int(nsa["suspicious_records"]) if nsa else 0
+        nsa_pass_rate = round((nsa_valid / nsa_total) * 100) if nsa_total else 0
+        nsa_run_at = nsa["created_at"].isoformat() if nsa else None
+
+        # ── Total NSA scans ever run ───────────────────────────────────────
+        cur.execute(
+            "SELECT COUNT(*) AS cnt FROM nsa_sessions WHERE user_id = %s",
+            (user_id,),
+        )
+        nsa_session_count = int(cur.fetchone()["cnt"])
+
+        # ── Sentiment results count ────────────────────────────────────────
+        cur.execute(
+            """
+            SELECT COUNT(*) AS cnt
+            FROM sentiment_results sr
+            JOIN feedback_records fr ON fr.feedback_id = sr.feedback_id
+            JOIN datasets d ON d.dataset_id = fr.dataset_id
+            WHERE d.loaded_by = %s
+            """,
+            (user_id,),
+        )
+        sentiment_count = int(cur.fetchone()["cnt"])
+
+        # ── Activity feed — real events from DB ────────────────────────────
+        # Pull the 8 most recent significant events for this user.
+        cur.execute(
+            """
+            (
+                SELECT
+                    'nsa_scan'          AS event_type,
+                    'NSA scan completed' AS title,
+                    total_records::TEXT AS detail,
+                    created_at
+                FROM nsa_sessions
+                WHERE user_id = %s
+                ORDER BY created_at DESC
+                LIMIT 3
+            )
+            UNION ALL
+            (
+                SELECT
+                    'dataset_loaded'    AS event_type,
+                    'Dataset loaded'    AS title,
+                    source_name         AS detail,
+                    loaded_at           AS created_at
+                FROM datasets
+                WHERE loaded_by = %s
+                ORDER BY loaded_at DESC
+                LIMIT 3
+            )
+            UNION ALL
+            (
+                SELECT
+                    'account_created'       AS event_type,
+                    'User account created'  AS title,
+                    full_name               AS detail,
+                    created_at
+                FROM users
+                WHERE user_id = %s
+                LIMIT 1
+            )
+            ORDER BY created_at DESC
+            LIMIT 8
+            """,
+            (user_id, user_id, user_id),
+        )
+        activity_rows = cur.fetchall()
+
+    activity = [
+        {
+            "eventType": row["event_type"],
+            "title": row["title"],
+            "detail": row["detail"],
+            "createdAt": row["created_at"].isoformat() if row["created_at"] else None,
+        }
+        for row in activity_rows
+    ]
+
+    return {
+        # Stat cards
+        "datasetCount": dataset_count,
+        "totalFeedback": total_feedback,
+        "nsaTotalRecords": nsa_total,
+        "nsaValidRecords": nsa_valid,
+        "nsaSuspiciousRecords": nsa_suspicious,
+        "nsaPassRate": nsa_pass_rate,
+        "nsaSessionCount": nsa_session_count,
+        "sentimentCount": sentiment_count,
+        # Donut chart
+        "donutData": [
+            {"name": "Valid (NSA Cleared)", "value": nsa_valid},
+            {"name": "Suspicious (Blocked)", "value": nsa_suspicious},
+        ],
+        # Pipeline — derived from what the user has actually done
+        "pipeline": {
+            "datasetLoaded": dataset_count > 0,
+            "nsaRun": nsa_session_count > 0,
+            "sentimentRun": sentiment_count > 0,
+        },
+        "nsaRunAt": nsa_run_at,
+        # Activity
+        "activity": activity,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Register routers
 # ---------------------------------------------------------------------------
 
@@ -861,3 +1022,4 @@ app.include_router(auth_router)
 app.include_router(datasets_router)
 app.include_router(nsa_router)
 app.include_router(sentiment_router)
+app.include_router(dashboard_router)
