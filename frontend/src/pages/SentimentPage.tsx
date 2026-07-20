@@ -3,20 +3,12 @@ import {
   Alert,
   Box,
   Button,
-  Chip,
   CircularProgress,
   Collapse,
   Divider,
-  LinearProgress,
   Paper,
   Snackbar,
   Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
   TextField,
   Typography,
 } from "@mui/material";
@@ -26,10 +18,7 @@ import {
   ChevronDown,
   ChevronUp,
   Database,
-  Minus,
   RotateCcw,
-  ThumbsDown,
-  ThumbsUp,
   Upload,
   Zap,
 } from "lucide-react";
@@ -53,19 +42,21 @@ import { PipelineTracker } from "../components/PipelineTracker";
 import { buildSteps } from "../data/pipelineSteps";
 import { fetchLatestValidRecords, runSentimentAnalysis } from "../services/api";
 import { useAuth } from "../context/AuthContext";
-import type { SentimentItem, SentimentLabel } from "../types";
-import { SummaryPanel } from "../components/SummaryPanel";
+import type { AnalysisResult, SentimentItem, SentimentLabel } from "../types";
+//import { SummaryPanel } from "../components/SummaryPanel";
+import { FeedbackCanvas } from "../components/FeedbackCanvas";
+import { SignalSummaryPanel } from "../components/SignalSummaryPanel";
 
 const LABEL_COLORS: Record<SentimentLabel, string> = {
   Positive: "#22c55e",
   Negative: "#ef4444",
   Neutral: "#f59e0b",
 };
-const LABEL_ICONS: Record<SentimentLabel, React.ReactNode> = {
-  Positive: <ThumbsUp size={14} />,
-  Negative: <ThumbsDown size={14} />,
-  Neutral: <Minus size={14} />,
-};
+// const LABEL_ICONS: Record<SentimentLabel, React.ReactNode> = {
+//   Positive: <ThumbsUp size={14} />,
+//   Negative: <ThumbsDown size={14} />,
+//   Neutral: <Minus size={14} />,
+// };
 
 const SENTIMENT_PURPLE = "#a78bfa";
 const PANEL_BG = "#050816";
@@ -92,7 +83,7 @@ export function SentimentPage() {
   const [overrideText, setOverrideText] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const [results, setResults] = useState<SentimentItem[]>([]);
+  const [results, setResults] = useState<SentimentItem[]| AnalysisResult[]>([]);
   const [summary, setSummary] = useState<{
     pos: number;
     neg: number;
@@ -729,7 +720,7 @@ export function SentimentPage() {
           </Paper>
 
           {/* Results terminal table */}
-          {results.length > 0 && (
+          {/* {results.length > 0 && (
             <Paper
               elevation={0}
               sx={{
@@ -894,7 +885,9 @@ export function SentimentPage() {
                 </Table>
               </TableContainer>
             </Paper>
-          )}
+          )} */}
+
+{results.length > 0 && <FeedbackCanvas results={results} />}
 
           {/* Analytics terminal */}
           {results.length > 0 && summary && (
@@ -1038,7 +1031,12 @@ export function SentimentPage() {
             top: 24,
           }}
         >
-          <SummaryPanel summary={summary} results={results} />
+          {/* <SummaryPanel summary={summary} results={results as SentimentItem[]} /> */}
+          <SignalSummaryPanel
+  mode="sentiment"
+  summary={summary}
+  results={results as SentimentItem[]}
+/>
         </Box>
       </Box>
 

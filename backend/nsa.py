@@ -202,7 +202,7 @@ def preprocess(text: str) -> str:
         "BUY NOW!! CLICK FREE$$$" -> "buy now  click free"
     """
     text = text.lower()
-    # Replace punctuation with space so "free!" -> "free "
+    # Replace punctuation with space 
     text = text.translate(
         str.maketrans(string.punctuation, " " * len(string.punctuation))
     )

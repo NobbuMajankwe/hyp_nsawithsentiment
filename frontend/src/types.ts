@@ -10,10 +10,6 @@ export interface AnalysisResult {
   anomalyScore: number;   // 0–100 integer
   anomalyReason: string;
 }
-
-// Sentiment result returned by POST /api/sentiment/analyse
-export type SentimentLabel = 'Positive' | 'Negative' | 'Neutral';
-
 export interface SentimentItem {
   id: number;
   originalText: string;
@@ -21,6 +17,10 @@ export interface SentimentItem {
   confidence: number;     // 0–100 float
   model: string;
 }
+
+// Sentiment result returned by POST /api/sentiment/analyse
+export type SentimentLabel = 'Positive' | 'Negative' | 'Neutral';
+
 
 export interface SentimentResponse {
   totalRecords: number;

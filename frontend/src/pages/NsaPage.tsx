@@ -6,7 +6,7 @@ import { PageLayout } from "../components/PageLayout";
 import { PageHero } from "../components/PageHero";
 import { InputPanel } from "../components/InputPanel";
 import { FeedbackCanvas } from "../components/FeedbackCanvas";
-import { FindingsPanel } from "../components/FindingsPanel";
+//import { FindingsPanel } from "../components/FindingsPanel";
 import { PipelineTracker } from "../components/PipelineTracker";
 //import { AnalyticsCharts } from "../components/AnalyticsCharts";
 
@@ -15,6 +15,7 @@ import { buildSteps } from "../data/pipelineSteps";
 import { runNsaAnalysis, type AnalyseResponse } from "../services/api";
 import type { AnalysisResult } from "../types";
 import { useAuth } from "../context/AuthContext";
+import { SignalSummaryPanel } from "../components/SignalSummaryPanel";
 
 export function NsaPage() {
   const { token } = useAuth();
@@ -84,7 +85,12 @@ export function NsaPage() {
         </Stack>
 
         <Box sx={{ position: { xl: "sticky" }, top: 24 }}>
-          <FindingsPanel summary={summary} results={results} />
+          {/* <FindingsPanel summary={summary} results={results} /> */}
+          <SignalSummaryPanel
+  mode="nsa"
+  summary={summary}
+  results={results}
+/>
         </Box>
       </Box>
 

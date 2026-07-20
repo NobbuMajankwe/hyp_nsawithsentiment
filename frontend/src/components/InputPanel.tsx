@@ -47,7 +47,7 @@ function parseCsv(text: string): string {
   if (lines.length === 0) return "";
 
   // Split a CSV line respecting quoted fields
-  function splitLine(line: string): string[] {
+  /* function splitLine(line: string): string[] {
     const result: string[] = [];
     let current = "";
     let inQuotes = false;
@@ -64,11 +64,41 @@ function parseCsv(text: string): string {
     }
     result.push(current.trim());
     return result;
+  } */
+
+    function splitLine(line: string): string[] {
+  const result: string[] = [];
+  let current = "";
+  let inQuotes = false;
+
+  // Detect delimiter (semicolon if present, otherwise comma)
+  const delimiter = line.includes(";") ? ";" : ",";
+
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+
+    if (ch === '"') {
+      inQuotes = !inQuotes;
+    } else if (ch === delimiter && !inQuotes) {
+      result.push(current.trim());
+      current = "";
+    } else {
+      current += ch;
+    }
   }
+
+  result.push(current.trim());
+  return result;
+}
 
   const headers = splitLine(lines[0]).map((h) =>
     h.toLowerCase().replace(/"/g, ""),
   );
+  const feedbackNotKeywords = [
+    "id",
+    "date",
+    "name"
+  ];
   const feedbackKeywords = [
     "feedback",
     "text",
@@ -77,9 +107,20 @@ function parseCsv(text: string): string {
     "review",
     "message",
   ];
-  let colIndex = headers.findIndex((h) =>
+  /* let colIndex = headers.findIndex((h) =>
     feedbackKeywords.some((kw) => h.includes(kw)),
-  );
+  ); */
+  let colIndex = headers.findIndex((header) => {
+    const h = header.toLowerCase();
+
+    const hasKeyword = feedbackKeywords.some((kw) => h.includes(kw));
+    const hasExcludedKeyword = feedbackNotKeywords.some((kw) => h.includes(kw));
+ console.log(hasKeyword);
+ console.log(hasExcludedKeyword);
+console.log(hasKeyword + ': '+ !hasExcludedKeyword)
+console.log(hasKeyword && !hasExcludedKeyword)
+    return hasKeyword && !hasExcludedKeyword;
+  });
   if (colIndex === -1) colIndex = 0; // fallback to first column
 
   const dataLines = lines.slice(1); // skip header row
@@ -114,7 +155,7 @@ function parseJson(text: string): string {
     if (arrayKey) items = (data as Record<string, unknown[]>)[arrayKey];
   }
 
-  const textKeys = [
+ /*  const textKeys = [
     "text",
     "feedback",
     "comment",
@@ -137,6 +178,53 @@ function parseJson(text: string): string {
     })
     .filter(Boolean)
     .join("\n");
+} */
+
+  const textKeys = [
+  "text",
+  "feedback",
+  "comment",
+  "response",
+  "review",
+  "message",
+  "content",
+];
+
+const textNotKeys = [
+  "id",
+];
+
+return items
+  .map((item) => {
+    if (typeof item === "string") return item.trim();
+
+    if (item && typeof item === "object") {
+      const obj = item as Record<string, unknown>;
+
+      const key = Object.keys(obj).find((k) => {
+        const keyName = k.toLowerCase();
+
+        const hasKeyword = textKeys.some((kw) => keyName.includes(kw));
+        const hasExcludedKeyword = textNotKeys.some((kw) =>
+          keyName.includes(kw)
+        );
+
+        return (
+          hasKeyword &&
+          !hasExcludedKeyword &&
+          typeof obj[k] === "string"
+        );
+      });
+
+      if (key) {
+        return (obj[key] as string).trim();
+      }
+    }
+
+    return "";
+  })
+  .filter(Boolean)
+  .join("\n");
 }
 
 function parseFile(file: File): Promise<string> {
