@@ -1,101 +1,81 @@
-import { useState } from "react";
-import {
-  Box,
-} from "@mui/material";
+import { useState } from 'react';
+import { Navigate, Route, Routes } from 'react-router-dom';
+import { Box } from '@mui/material';
 
-import {
-  Header,
-  SIDENAV_WIDTH,
-  SIDENAV_COLLAPSED_WIDTH,
-  HEADER_HEIGHT,
-} from "./components/Header";
-import { LoginPage, RegisterPage, ResetPasswordPage } from "./pages/LoginPage";
-import { SentimentPage } from "./pages/SentimentPage";
-import { InsightStoryPage } from "./pages/InsightStoryPage";
-import { NsaPage } from "./pages/NsaPage";
-import { useAuth } from "./context/AuthContext";
-import ProfilePage from "./pages/ProfilePage";
-import Dashboard2 from "./pages/Dashboard2";
-
-export type Page =
-  | "profile"
-  | "nsa"
-  | "sentiment"
-  | "insight"
-  | "settings"
-  | "dashboard"
-  | "analytics";
+import { Header, SIDENAV_WIDTH, SIDENAV_COLLAPSED_WIDTH, HEADER_HEIGHT } from './components/Header';
+import { SentimentPage } from './pages/SentimentPage';
+import { InsightStoryPage } from './pages/InsightStoryPage';
+import { NsaPage } from './pages/NsaPage';
+import { LoginPage, RegisterPage, ResetPasswordPage } from './pages/LoginPage';
+import ProfilePage from './pages/ProfilePage';
+import Dashboard from './pages/Dashboard';
+import { useAuth } from './context/AuthContext';
+import Settings from './pages/Settings';
 
 // ---------------------------------------------------------------------------
-// Root — auth gate
+// Auth gate — unauthenticated users see login/register/reset
 // ---------------------------------------------------------------------------
 
-export default function App() {
-  const { isAuthenticated } = useAuth();
-  const [authView, setAuthView] = useState<"login" | "reset" | "register">(
-    "login",
-  );
+function AuthGate() {
+  const [view, setView] = useState<'login' | 'register' | 'reset'>('login');
 
-  if (!isAuthenticated) {
-    switch (authView) {
-      case "register":
-        return <RegisterPage onSwitchToLogin={() => setAuthView("login")} />;
-
-      case "reset":
-        return <ResetPasswordPage onBackToLogin={() => setAuthView("login")} />;
-
-      case "login":
-      default:
-        return (
-          <LoginPage
-            onSwitchToRegister={() => setAuthView("register")}
-            onSwitchToReset={() => setAuthView("reset")}
-          />
-        );
-    }
+  switch (view) {
+    case 'register':
+      return <RegisterPage onSwitchToLogin={() => setView('login')} />;
+    case 'reset':
+      return <ResetPasswordPage onBackToLogin={() => setView('login')} />;
+    default:
+      return (
+        <LoginPage
+          onSwitchToRegister={() => setView('register')}
+          onSwitchToReset={() => setView('reset')}
+        />
+      );
   }
-
-  return <Box sx={{maxHeight: "90vh", bgcolor: "rgba(99,102,241,0.15)", mr: -1, my: -1 }}>
-    <Dashboard />;
-  </Box>
 }
 
 // ---------------------------------------------------------------------------
-// Dashboard — persistent shell with sidenav
+// Protected shell — header + sidenav + routed content
 // ---------------------------------------------------------------------------
 
-function Dashboard() {
-  const [page, setPage] = useState<Page>("dashboard");
+function AppShell() {
   const [expanded, setExpanded] = useState(true);
   const sideWidth = expanded ? SIDENAV_WIDTH : SIDENAV_COLLAPSED_WIDTH;
 
   return (
-    <Box sx={{ minHeight: "100vh", bgcolor: "rgba(99,102,241,0.35)" }}>
-      {/* Fixed header + attached sidenav */}
-      <Header
-        currentPage={page}
-        onNavigate={setPage}
-        expanded={expanded}
-        onToggle={() => setExpanded((e) => !e)}
-      />
+    <Box sx={{ minHeight: '100vh', bgcolor: '#020617' }}>
+      <Header expanded={expanded} onToggle={() => setExpanded((e) => !e)} />
 
-      {/* Content — pushed right by sidenav width and down by header height */}
       <Box
         sx={{
           ml: { xs: 0, lg: `${sideWidth}px` },
           mt: `${HEADER_HEIGHT}px`,
-          transition: "margin-left 0.25s ease",
+          transition: 'margin-left 0.25s ease',
           minHeight: `calc(100vh - ${HEADER_HEIGHT}px)`,
         }}
       >
-        {page === "profile" && <ProfilePage />}
-        {page === "dashboard" && <Dashboard2 onNavigate={setPage} />}
-        {page === "nsa" && <NsaPage />}
-        {page === "sentiment" && <SentimentPage />}
-        {page === "insight" && <InsightStoryPage />}
+        <Routes>
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/nsa" element={<NsaPage />} />
+          <Route path="/sentiment" element={<SentimentPage />} />
+          <Route path="/insight" element={<InsightStoryPage />} />
+          <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/settings" element={<Settings />} />
+          <Route path="/analytics" element={<ProfilePage />} />
+          {/* Catch-all back to dashboard */}
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        </Routes>
       </Box>
     </Box>
   );
 }
 
+// ---------------------------------------------------------------------------
+// Root — switches between auth gate and app shell
+// ---------------------------------------------------------------------------
 
+export default function App() {
+  const { isAuthenticated } = useAuth();
+  return isAuthenticated ? <AppShell /> : <AuthGate />;
+}

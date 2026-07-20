@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Box, Button, Chip, CircularProgress, Container,
   Divider, Paper, Stack, Typography,
@@ -8,12 +9,13 @@ import {
   FileBarChart2, Play, ShieldCheck,
   Sparkles, UserCheck, XCircle, Zap,
 } from 'lucide-react';
-import type { Page } from '../App';
 import { Cell, Legend, Pie, PieChart, Tooltip as RechartsTooltip } from 'recharts';
 
 import { HEADER_HEIGHT } from '../components/Header';
 import { useAuth } from '../context/AuthContext';
-import { fetchDashboardSummary, type DashboardSummary, type DashboardActivity } from '../services/api';
+import { useAppDispatch, useAppSelector } from '../store/hooks';
+import { loadDashboard } from '../store/dashboardSlice';
+import type { DashboardActivity } from '../services/api';
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -71,22 +73,24 @@ function activityMeta(item: DashboardActivity): {
 
 // ─── main component ───────────────────────────────────────────────────────────
 
-export default function Dashboard2({ onNavigate }: { onNavigate: (page: Page) => void }) {
+export default function Dashboard() {
   const { user, token } = useAuth();
+  const navigate = useNavigate();
+  const dispatch = useAppDispatch();
   const greeting = getGreeting();
 
-  const [summary, setSummary] = useState<DashboardSummary | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const summary  = useAppSelector((s) => s.dashboard.data);
+  const status   = useAppSelector((s) => s.dashboard.status);
+  const error    = useAppSelector((s) => s.dashboard.error);
+  const loading  = status === 'idle' || status === 'loading';
 
   useEffect(() => {
     if (!token) return;
-    let cancelled = false;
-    fetchDashboardSummary(token)
-      .then((data) => { if (!cancelled) { setSummary(data); setLoading(false); } })
-      .catch(() => { if (!cancelled) { setError('Could not load dashboard data.'); setLoading(false); } });
-    return () => { cancelled = true; };
-  }, [token]);
+    // Only fetch if we don't already have fresh data
+    if (status === 'idle') {
+      dispatch(loadDashboard(token));
+    }
+  }, [token, status, dispatch]);
 
   const roleLabel = user?.role === 'SYSTEM_ADMIN' ? 'System Admin' : 'Event Organiser';
   const roleColor = user?.role === 'SYSTEM_ADMIN' ? '#a78bfa' : '#22d3ee';
@@ -429,7 +433,7 @@ export default function Dashboard2({ onNavigate }: { onNavigate: (page: Page) =>
                 >
                   <Stack spacing={1.5}>
                     <Button variant="contained" startIcon={<Play size={15} />} fullWidth
-                      onClick={() => onNavigate('nsa')}
+                      onClick={() => navigate('/nsa')}
                       sx={{
                         py: 1.25, borderRadius: 2, bgcolor: '#22d3ee', color: '#020617',
                         fontWeight: 900, fontFamily: 'monospace', textTransform: 'none',
@@ -439,7 +443,7 @@ export default function Dashboard2({ onNavigate }: { onNavigate: (page: Page) =>
                       ./run_nsa_analysis
                     </Button>
                     <Button variant="outlined" startIcon={<BrainCircuit size={15} />} fullWidth
-                      onClick={() => onNavigate('sentiment')}
+                      onClick={() => navigate('/sentiment')}
                       sx={{
                         py: 1.15, borderRadius: 2, borderColor: 'rgba(139,92,246,0.4)',
                         color: '#c4b5fd', fontWeight: 800, fontFamily: 'monospace', textTransform: 'none',
@@ -448,7 +452,7 @@ export default function Dashboard2({ onNavigate }: { onNavigate: (page: Page) =>
                       ./run_sentiment_analysis
                     </Button>
                     <Button variant="outlined" startIcon={<FileBarChart2 size={15} />} fullWidth
-                      onClick={() => onNavigate('insight')}
+                      onClick={() => navigate('/insight')}
                       disabled={!summary.pipeline.sentimentRun}
                       sx={{
                         py: 1.15, borderRadius: 2, fontWeight: 800,
