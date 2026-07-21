@@ -164,3 +164,77 @@ export async function fetchDashboardSummary(token: string): Promise<DashboardSum
   });
   return data;
 }
+
+// ---------------------------------------------------------------------------
+// Integration Settings
+// ---------------------------------------------------------------------------
+
+export interface IntegrationSettings {
+  extApiUrl: string | null;
+  extApiToken: string | null;
+  extDataPath: string | null;
+  extTextField: string;
+  extIdField: string;
+  webhookUrl: string | null;
+  webhookSecret: string | null;
+  webhookEnabled: boolean;
+  nsaThreshold: number | null;
+  nsaDetectorCount: number | null;
+  apiKey: string | null;
+  apiKeyLabel: string | null;
+  apiKeyCreatedAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface ConnectionTestResult {
+  success: boolean;
+  totalRecords: number;
+  preview: { id: string | number | null; text: string }[];
+}
+
+function authHeader(token: string) {
+  return { Authorization: `Bearer ${token}` };
+}
+
+export async function fetchSettings(token: string): Promise<IntegrationSettings> {
+  const { data } = await apiClient.get<IntegrationSettings>('/api/settings', {
+    headers: authHeader(token),
+  });
+  return data;
+}
+
+export async function saveSettings(
+  token: string,
+  payload: Partial<IntegrationSettings>,
+): Promise<IntegrationSettings> {
+  const { data } = await apiClient.put<IntegrationSettings>('/api/settings', payload, {
+    headers: authHeader(token),
+  });
+  return data;
+}
+
+export async function generateApiKey(token: string): Promise<IntegrationSettings> {
+  const { data } = await apiClient.post<IntegrationSettings>('/api/settings/apikey', null, {
+    headers: authHeader(token),
+  });
+  return data;
+}
+
+export async function revokeApiKey(token: string): Promise<IntegrationSettings> {
+  const { data } = await apiClient.delete<IntegrationSettings>('/api/settings/apikey', {
+    headers: authHeader(token),
+  });
+  return data;
+}
+
+export async function testExternalConnection(
+  token: string,
+  payload: Partial<IntegrationSettings>,
+): Promise<ConnectionTestResult> {
+  const { data } = await apiClient.post<ConnectionTestResult>(
+    '/api/settings/test-connection',
+    payload,
+    { headers: authHeader(token) },
+  );
+  return data;
+}

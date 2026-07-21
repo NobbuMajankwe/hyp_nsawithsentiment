@@ -46,6 +46,7 @@ export function PageHero({
     <Paper
       elevation={0}
       sx={{
+        //display: 'none',
         position: 'relative',
         p: { xs: 3, md: 5 },
         mb: 4,

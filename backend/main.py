@@ -1015,6 +1015,256 @@ def dashboard_summary(current_user: dict = Depends(get_current_user)):
 
 
 # ---------------------------------------------------------------------------
+# Routes — Integration Settings (protected)
+# ---------------------------------------------------------------------------
+
+import secrets as _secrets
+
+settings_router = APIRouter(
+    prefix="/api/settings",
+    tags=["Settings"],
+)
+
+
+class IntegrationSettingsPayload(BaseModel):
+    extApiUrl: Optional[str] = None
+    extApiToken: Optional[str] = None
+    extDataPath: Optional[str] = None
+    extTextField: Optional[str] = "text"
+    extIdField: Optional[str] = "id"
+    webhookUrl: Optional[str] = None
+    webhookSecret: Optional[str] = None
+    webhookEnabled: bool = False
+    nsaThreshold: Optional[float] = None
+    nsaDetectorCount: Optional[int] = None
+    apiKeyLabel: Optional[str] = None
+
+
+class IntegrationSettingsResponse(IntegrationSettingsPayload):
+    apiKey: Optional[str] = None
+    apiKeyCreatedAt: Optional[str] = None
+    updatedAt: Optional[str] = None
+
+
+def _upsert_settings(user_id: int, payload: IntegrationSettingsPayload) -> dict:
+    with get_cursor(commit=True) as cur:
+        cur.execute(
+            """
+            INSERT INTO integration_settings (
+                user_id, ext_api_url, ext_api_token, ext_data_path,
+                ext_text_field, ext_id_field,
+                webhook_url, webhook_secret, webhook_enabled,
+                nsa_threshold, nsa_detector_count,
+                api_key_label, updated_at
+            )
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s, CURRENT_TIMESTAMP)
+            ON CONFLICT (user_id) DO UPDATE SET
+                ext_api_url        = EXCLUDED.ext_api_url,
+                ext_api_token      = EXCLUDED.ext_api_token,
+                ext_data_path      = EXCLUDED.ext_data_path,
+                ext_text_field     = EXCLUDED.ext_text_field,
+                ext_id_field       = EXCLUDED.ext_id_field,
+                webhook_url        = EXCLUDED.webhook_url,
+                webhook_secret     = EXCLUDED.webhook_secret,
+                webhook_enabled    = EXCLUDED.webhook_enabled,
+                nsa_threshold      = EXCLUDED.nsa_threshold,
+                nsa_detector_count = EXCLUDED.nsa_detector_count,
+                api_key_label      = EXCLUDED.api_key_label,
+                updated_at         = CURRENT_TIMESTAMP
+            RETURNING *
+            """,
+            (
+                user_id,
+                payload.extApiUrl,
+                payload.extApiToken,
+                payload.extDataPath,
+                payload.extTextField,
+                payload.extIdField,
+                payload.webhookUrl,
+                payload.webhookSecret,
+                payload.webhookEnabled,
+                payload.nsaThreshold,
+                payload.nsaDetectorCount,
+                payload.apiKeyLabel,
+            ),
+        )
+        return cur.fetchone()
+
+
+def _get_settings(user_id: int) -> dict | None:
+    with get_cursor() as cur:
+        cur.execute(
+            "SELECT * FROM integration_settings WHERE user_id = %s LIMIT 1",
+            (user_id,),
+        )
+        return cur.fetchone()
+
+
+def _row_to_response(row: dict) -> dict:
+    return {
+        "extApiUrl": row.get("ext_api_url"),
+        "extApiToken": row.get("ext_api_token"),
+        "extDataPath": row.get("ext_data_path"),
+        "extTextField": row.get("ext_text_field") or "text",
+        "extIdField": row.get("ext_id_field") or "id",
+        "webhookUrl": row.get("webhook_url"),
+        "webhookSecret": row.get("webhook_secret"),
+        "webhookEnabled": bool(row.get("webhook_enabled")),
+        "nsaThreshold": (
+            float(row["nsa_threshold"]) if row.get("nsa_threshold") else None
+        ),
+        "nsaDetectorCount": row.get("nsa_detector_count"),
+        "apiKey": row.get("api_key"),
+        "apiKeyLabel": row.get("api_key_label"),
+        "apiKeyCreatedAt": (
+            row["api_key_created_at"].isoformat()
+            if row.get("api_key_created_at")
+            else None
+        ),
+        "updatedAt": (row["updated_at"].isoformat() if row.get("updated_at") else None),
+    }
+
+
+@settings_router.get("", response_model=IntegrationSettingsResponse)
+def get_settings(current_user: dict = Depends(get_current_user)):
+    row = _get_settings(current_user["sub"])
+    if not row:
+        return IntegrationSettingsResponse()
+    return _row_to_response(row)
+
+
+@settings_router.put("", response_model=IntegrationSettingsResponse)
+def save_settings(
+    payload: IntegrationSettingsPayload,
+    current_user: dict = Depends(get_current_user),
+):
+    row = _upsert_settings(current_user["sub"], payload)
+    return _row_to_response(row)
+
+
+@settings_router.post("/apikey", response_model=IntegrationSettingsResponse)
+def generate_api_key(
+    current_user: dict = Depends(get_current_user),
+):
+    """Generate a new API key for external systems to call EventSense AI."""
+    new_key = "esa_" + _secrets.token_hex(32)
+    user_id = current_user["sub"]
+
+    with get_cursor(commit=True) as cur:
+        cur.execute(
+            """
+            INSERT INTO integration_settings (user_id, api_key, api_key_created_at, updated_at)
+            VALUES (%s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            ON CONFLICT (user_id) DO UPDATE SET
+                api_key            = EXCLUDED.api_key,
+                api_key_created_at = CURRENT_TIMESTAMP,
+                updated_at         = CURRENT_TIMESTAMP
+            RETURNING *
+            """,
+            (user_id, new_key),
+        )
+        row = cur.fetchone()
+    return _row_to_response(row)
+
+
+@settings_router.delete("/apikey", response_model=IntegrationSettingsResponse)
+def revoke_api_key(current_user: dict = Depends(get_current_user)):
+    """Revoke (delete) the current API key."""
+    user_id = current_user["sub"]
+    with get_cursor(commit=True) as cur:
+        cur.execute(
+            """
+            UPDATE integration_settings
+            SET api_key = NULL, api_key_created_at = NULL, updated_at = CURRENT_TIMESTAMP
+            WHERE user_id = %s
+            RETURNING *
+            """,
+            (user_id,),
+        )
+        row = cur.fetchone()
+    if not row:
+        return IntegrationSettingsResponse()
+    return _row_to_response(row)
+
+
+@settings_router.post("/test-connection")
+async def test_external_connection(
+    payload: IntegrationSettingsPayload,
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Test connectivity to the configured external data source.
+    Makes a live GET request from the backend and returns a preview
+    of up to 3 records so the user can confirm field mappings.
+    """
+    import httpx
+
+    url = (payload.extApiUrl or "").strip()
+    if not url:
+        raise HTTPException(status_code=422, detail="No API URL provided.")
+
+    headers = {"Accept": "application/json"}
+    if payload.extApiToken:
+        headers["Authorization"] = f"Bearer {payload.extApiToken.strip()}"
+
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(url, headers=headers)
+        resp.raise_for_status()
+        body = resp.json()
+    except httpx.TimeoutException:
+        raise HTTPException(
+            status_code=504, detail="Request timed out after 10 seconds."
+        )
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Remote server returned {exc.response.status_code}.",
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+    # Walk the data path to find the array of records
+    data = body
+    if payload.extDataPath:
+        for key in payload.extDataPath.split("."):
+            if isinstance(data, dict) and key in data:
+                data = data[key]
+            else:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Path '{payload.extDataPath}' not found in response.",
+                )
+
+    if not isinstance(data, list):
+        raise HTTPException(
+            status_code=422,
+            detail="Resolved path does not contain an array. Check the data path.",
+        )
+
+    text_field = payload.extTextField or "text"
+    id_field = payload.extIdField or "id"
+
+    preview = []
+    for item in data[:3]:
+        if isinstance(item, str):
+            preview.append({"id": None, "text": item})
+        elif isinstance(item, dict):
+            preview.append(
+                {
+                    "id": item.get(id_field),
+                    "text": item.get(text_field, ""),
+                }
+            )
+
+    return {
+        "success": True,
+        "totalRecords": len(data),
+        "preview": preview,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Register routers
 # ---------------------------------------------------------------------------
 
@@ -1023,3 +1273,4 @@ app.include_router(datasets_router)
 app.include_router(nsa_router)
 app.include_router(sentiment_router)
 app.include_router(dashboard_router)
+app.include_router(settings_router)

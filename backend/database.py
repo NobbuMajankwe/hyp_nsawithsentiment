@@ -265,6 +265,37 @@ CREATE INDEX IF NOT EXISTS idx_nsa_session_results_session
 ON nsa_session_results(session_id);
 """
 
+CREATE_INTEGRATION_SETTINGS_TABLE = """
+CREATE TABLE IF NOT EXISTS integration_settings (
+    setting_id      SERIAL PRIMARY KEY,
+    user_id         INTEGER REFERENCES users(user_id) ON DELETE CASCADE,
+
+    -- External data source
+    ext_api_url     TEXT,
+    ext_api_token   TEXT,
+    ext_data_path   TEXT,
+    ext_text_field  VARCHAR(100) DEFAULT 'text',
+    ext_id_field    VARCHAR(100) DEFAULT 'id',
+
+    -- Webhook / push results back
+    webhook_url     TEXT,
+    webhook_secret  TEXT,
+    webhook_enabled BOOLEAN DEFAULT FALSE,
+
+    -- NSA engine overrides (per-user; falls back to system_configuration)
+    nsa_threshold   NUMERIC(10,4),
+    nsa_detector_count INTEGER,
+
+    -- API key for external systems calling EventSense
+    api_key         TEXT UNIQUE,
+    api_key_label   VARCHAR(255),
+    api_key_created_at TIMESTAMP,
+
+    updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id)
+);
+"""
+
 CREATE_OTP_TABLE = """
 CREATE TABLE IF NOT EXISTS otp_codes (
     otp_id      SERIAL PRIMARY KEY,
@@ -300,6 +331,7 @@ def init_db() -> None:
         CREATE_NSA_SESSIONS_TABLE,
         CREATE_NSA_SESSION_RESULTS_TABLE,
         CREATE_OTP_TABLE,
+        CREATE_INTEGRATION_SETTINGS_TABLE,
     ]
 
     with get_cursor(commit=True) as cur:
