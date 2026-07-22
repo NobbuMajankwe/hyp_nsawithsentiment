@@ -288,10 +288,6 @@ ON otp_codes(email, purpose);
 
 
 def init_db() -> None:
-    """
-    Create the full EventSense AI database schema if it does not already exist.
-    Called once at application startup from main.py.
-    """
     statements = [
         CREATE_USERS_TABLE,
         CREATE_DATASETS_TABLE,
