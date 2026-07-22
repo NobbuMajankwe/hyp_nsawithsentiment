@@ -10,7 +10,7 @@ import { FeedbackCanvas } from "../components/FeedbackCanvas";
 import { PipelineTracker } from "../components/PipelineTracker";
 //import { AnalyticsCharts } from "../components/AnalyticsCharts";
 
-import { SAMPLE_TEXT } from "../data/mockFeedback";
+//import { SAMPLE_TEXT } from "../data/mockFeedback";
 import { buildSteps } from "../data/pipelineSteps";
 import { runNsaAnalysis, type AnalyseResponse } from "../services/api";
 import type { AnalysisResult } from "../types";
@@ -19,7 +19,7 @@ import { SignalSummaryPanel } from "../components/SignalSummaryPanel";
 
 export function NsaPage() {
   const { token } = useAuth();
-  const [datasetText, setDatasetText] = useState(SAMPLE_TEXT);
+  const [datasetText, setDatasetText] = useState("");
   const [results, setResults] = useState<AnalysisResult[]>([]);
   const [summary, setSummary] = useState<AnalyseResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -42,7 +42,7 @@ export function NsaPage() {
   }
 
   function handleReset() {
-    setDatasetText(SAMPLE_TEXT);
+    setDatasetText("");
     setResults([]);
     setSummary(null);
     setError(null);

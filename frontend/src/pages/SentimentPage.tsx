@@ -595,6 +595,7 @@ export function SentimentPage() {
                 )
               }
               sx={{
+                display:'none',
                 p: 2.5,
                 borderRadius: 0,
                 justifyContent: "space-between",
@@ -626,7 +627,7 @@ export function SentimentPage() {
               </Stack>
             </Button>
 
-            <Collapse in={overrideOpen}>
+            
               <Divider sx={{ borderColor: "rgba(148,163,184,0.12)" }} />
 
               <Box sx={{ p: 3 }}>
@@ -689,6 +690,7 @@ export function SentimentPage() {
                   }}
                   placeholder={`# one feedback record per line\nThe event was excellent.\nThe session started late.`}
                   sx={{
+                    display:'none',
                     "& .MuiOutlinedInput-root": {
                       borderRadius: 3,
                       bgcolor: INNER_BG,
@@ -716,9 +718,9 @@ export function SentimentPage() {
                   }}
                 />
               </Box>
-            </Collapse>
+           
           </Paper>
-
+ <Collapse in={overrideOpen}></Collapse>
           {/* Results terminal table */}
           {/* {results.length > 0 && (
             <Paper

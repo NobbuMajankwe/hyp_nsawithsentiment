@@ -1,20 +1,3 @@
-"""
-main.py — FastAPI entry point for EventSense AI backend
-=========================================================
-Endpoints:
-  POST /api/auth/register  — create a new account
-  POST /api/auth/login     — obtain a JWT
-  GET  /api/auth/me        — return current user from token
-  POST /api/nsa/analyse    — run NSA analysis (requires valid JWT)
-  POST /api/datasets/upload — upload CSV/JSON dataset
-  GET  /api/datasets       — list user's datasets
-  GET  /api/datasets/{id}  — get dataset details
-  DELETE /api/datasets/{id} — delete a dataset
-
-Run with:
-    uvicorn main:app --reload --port 8000
-"""
-
 import hashlib
 import json as _json
 from fastapi import (
@@ -194,7 +177,7 @@ app.add_middleware(
         "http://localhost:5173",
         "http://127.0.0.1:5173",
         "http://localhost:3000",
-        "http://localhost:3001",
+        "http://localhost:3001", #for the live test
     ],
     allow_credentials=True,
     allow_methods=["*"],
