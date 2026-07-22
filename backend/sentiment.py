@@ -1,52 +1,3 @@
-"""
-sentiment.py — Hugging Face API and PyTorch sentiment classifier
-================================================================
-
-Uses DistilBERT fine-tuned on SST-2:
-
-    distilbert-base-uncased-finetuned-sst-2-english
-
-The classifier follows this processing order:
-
-    1. Hugging Face Inference API
-    2. Local PyTorch DistilBERT inference
-    3. Lexicon-based fallback
-
-The Hugging Face Inference API is used when HF_API_TOKEN is configured.
-
-If the API request fails or HF_API_TOKEN is not configured, the same
-DistilBERT model is loaded and executed locally using PyTorch.
-
-If local PyTorch inference also fails, a simple lexicon-based classifier
-is used so that the endpoint remains available during development.
-
-Required packages:
-
-    pip install torch transformers
-
-Optional environment variable:
-
-    HF_API_TOKEN — Hugging Face API token
-
-Response for each text:
-
-    {
-        "label": "Positive" | "Negative" | "Neutral",
-        "confidence": 0.0–100.0,
-        "model": (
-            "distilbert-sst2-api"
-            | "distilbert-sst2-pytorch"
-            | "lexicon-fallback"
-            | "skipped"
-        )
-    }
-
-Important:
-
-The SST-2 DistilBERT model predicts only POSITIVE and NEGATIVE.
-Neutral results are derived using a configurable confidence threshold.
-"""
-
 from __future__ import annotations
 
 import json
@@ -461,9 +412,6 @@ def _classify_via_pytorch(
 ) -> list[SentimentResult]:
     """
     Classify texts locally using PyTorch and DistilBERT.
-
-    This method is used when the Hugging Face API is unavailable or
-    when HF_API_TOKEN has not been configured.
     """
     all_results: list[SentimentResult] = []
 
@@ -592,7 +540,7 @@ def _lexicon_classify(
     """
     Classify a text using a small sentiment lexicon.
 
-    This method is used only if the Hugging Face API and local PyTorch
+    Backup if the Hugging Face API and local PyTorch
     inference are both unavailable.
     """
     words = _normalise_words(text)
@@ -684,18 +632,7 @@ def _classify_via_lexicon(
 def classify_sentiment(
     texts: list[str],
 ) -> list[SentimentResult]:
-    """
-    Classify a list of feedback texts.
 
-    Processing order:
-
-        1. Empty texts are marked as skipped.
-        2. The Hugging Face API is used when HF_API_TOKEN is set.
-        3. If the API fails or no token is configured, local PyTorch
-           inference is used.
-        4. If PyTorch inference fails, the lexicon fallback is used.
-        5. Results retain the original input order.
-    """
     if not isinstance(texts, list):
         raise TypeError("texts must be provided as a list.")
 
@@ -781,9 +718,6 @@ def _classify_with_local_fallback(
 ) -> list[SentimentResult]:
     """
     Attempt local PyTorch classification.
-
-    If local model loading or inference fails, use the lexicon-based
-    fallback classifier.
     """
     try:
         logger.info(
@@ -810,11 +744,6 @@ def get_sentiment_model_status() -> dict[
     str,
     str | bool | float,
 ]:
-    """
-    Return the current sentiment classifier configuration.
-
-    This can be exposed through a FastAPI status or health endpoint.
-    """
     if HF_API_TOKEN:
         primary_method = "hugging-face-api"
     else:

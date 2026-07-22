@@ -44,11 +44,6 @@ def get_connection() -> psycopg2.extensions.connection:
 def get_cursor(
     commit: bool = False,
 ) -> Generator[psycopg2.extras.RealDictCursor, None, None]:
-    """
-    Yield a RealDictCursor and optionally commit changes.
-
-    Automatically rolls back if an exception occurs.
-    """
     conn = get_connection()
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:

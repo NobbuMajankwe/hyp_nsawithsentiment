@@ -1,16 +1,5 @@
 """
-email_service.py — Mailgun email delivery for EventSense AI
-=============================================================
-Sends transactional emails (verification OTPs, password reset links)
-via the Mailgun HTTP API.
-
-Required environment variables:
-    MAILGUN_API_KEY   — your Mailgun private API key
-    MAILGUN_DOMAIN    — your verified Mailgun sending domain
-    FROM_EMAIL        — sender address (default: noreply@<MAILGUN_DOMAIN>)
-
-If MAILGUN_API_KEY is not set the service falls back to printing the
-code to the terminal (useful during local development).
+this is yet to be used for authentication
 """
 
 from __future__ import annotations
@@ -69,7 +58,6 @@ def _send_via_mailgun(to: str, subject: str, html: str, text: str) -> None:
 
 
 def _fallback_log(to: str, subject: str, text: str) -> None:
-    """Print to terminal when Mailgun is not configured (dev mode)."""
     sep = "=" * 60
     print(f"\n{sep}")
     print(f"[DEV EMAIL] To: {to}")
