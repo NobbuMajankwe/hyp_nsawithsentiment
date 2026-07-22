@@ -1,12 +1,4 @@
-"""
-auth.py — Authentication layer for EventSense AI
-==================================================
-Provides:
-  - Password hashing with bcrypt or PBKDF2 fallback
-  - JWT creation / verification
-  - User CRUD backed by PostgreSQL via database.py
-  - Role definitions: EVENT_ORGANISER | SYSTEM_ADMIN
-"""
+
 
 from __future__ import annotations
 

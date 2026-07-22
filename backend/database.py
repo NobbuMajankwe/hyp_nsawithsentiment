@@ -1,23 +1,4 @@
-"""
-database.py — PostgreSQL connection and schema management
-=========================================================
-Uses psycopg2 for PostgreSQL connection and schema creation.
 
-Database:
-    eventsense_ai
-
-Main tables:
-    users
-    datasets
-    feedback_records
-    preprocessing_log
-    nsa_detectors
-    anomaly_results
-    sentiment_results
-    reports
-    system_configuration
-    experiment_runs
-"""
 
 from __future__ import annotations
 

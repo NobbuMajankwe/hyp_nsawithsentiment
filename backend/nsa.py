@@ -1,28 +1,4 @@
-"""
-nsa.py — Negative Selection Algorithm (NSA) for Feedback Anomaly Detection
-===========================================================================
-Part 1 of the Hybrid Sentiment Analysis + NSA Feedback Analysis System.
 
-HOW THE ALGORITHM WORKS
-------------------------
-we define "normal" feedback as the self-space, generate
-random detectors that cover the non-self space, then flag any feedback that
-matches a detector as anomalous.
-
-Pipeline:
-  1. Preprocess   -> lowercase, strip punctuation, collapse whitespace
-  2. Tokenise     -> split on whitespace, remove stopwords
-  3. Vectorise    -> build a simple bag-of-words vocabulary; each text becomes
-                    a fixed-length binary/frequency vector (no sklearn)
-  4. Self space   -> normal training samples define the self region
-  5. Detectors    -> random candidates rejected if they land inside self space
-                    (distance < self_match_threshold)
-  6. Detection    -> each input vector is tested against all detectors;
-                    if ANY detector matches (distance <= detector_radius) the
-                    record is flagged as Suspicious
-  7. Scoring      -> anomaly score = max(0, 1 − closest_detector_distance),
-                    scaled to 0–100 integer
-"""
 
 from __future__ import annotations
 
