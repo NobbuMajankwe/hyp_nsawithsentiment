@@ -562,9 +562,7 @@ class NegativeSelectionAlgorithm:
         )
 
     def detect_batch(self, feedback_list: list[str]) -> NSAResponse:
-        """
-        Analyse a list of feedback strings and return an NSAResponse.
-        """
+    
         results = []
 
         with get_cursor(commit=True) as cur:
@@ -674,15 +672,7 @@ _nsa_instance: Optional[NegativeSelectionAlgorithm] = None
 
 
 def get_nsa() -> NegativeSelectionAlgorithm:
-    """
-    Return a trained NSA singleton.
-
-    Loads normal feedback corpus from the database and trains on first call.
-    Subsequent calls return the cached instance.
-
-    Raises:
-        RuntimeError: If the normal corpus is not found in the database.
-    """
+    
     global _nsa_instance
     if _nsa_instance is None:
         # Load normal corpus from database
