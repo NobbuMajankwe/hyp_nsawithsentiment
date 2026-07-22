@@ -43,13 +43,11 @@ from dataset_handler import (
 
 
 def _feedback_hash(feedback: list[str]) -> str:
-    """Stable SHA-256 of the sorted+joined feedback lines."""
     canonical = "\n".join(sorted(line.strip() for line in feedback if line.strip()))
     return hashlib.sha256(canonical.encode()).hexdigest()
 
 
 def _load_cached_session(user_id: int, input_hash: str) -> dict | None:
-    """Return the cached AnalyseResponse dict if it exists, else None."""
     with get_cursor() as cur:
         cur.execute(
             "SELECT * FROM nsa_sessions WHERE user_id = %s AND input_hash = %s LIMIT 1",
@@ -87,7 +85,6 @@ def _load_cached_session(user_id: int, input_hash: str) -> dict | None:
 
 
 def _save_session(user_id: int, input_hash: str, response: "AnalyseResponse") -> None:
-    """Persist an analysis response to the DB, replacing any prior run for the same hash."""
     with get_cursor(commit=True) as cur:
         # Upsert the session summary
         cur.execute(
@@ -177,7 +174,7 @@ app.add_middleware(
         "http://localhost:5173",
         "http://127.0.0.1:5173",
         "http://localhost:3000",
-        "http://localhost:3001", #for the live test
+        "http://localhost:3001",  # for the live test
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -195,10 +192,6 @@ bearer_scheme = HTTPBearer()
 def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
 ) -> dict:
-    """
-    Decode the Bearer token and return the payload.
-    Raises 401 if missing, invalid, or expired.
-    """
     payload = decode_access_token(credentials.credentials)
     if payload is None:
         raise HTTPException(
@@ -320,11 +313,6 @@ class DatasetFeedbackResponse(BaseModel):
 
 
 class SentimentRequest(BaseModel):
-    """
-    Accepts a list of feedback strings that have already passed the NSA filter.
-    Only Valid records should be sent here.
-    """
-
     texts: List[str]
 
 
@@ -467,11 +455,7 @@ def reset_password(body: ResetPasswordRequest):
 
 @nsa_router.get("/latest-valid")
 def get_latest_valid_records(current_user: dict = Depends(get_current_user)):
-    """
-    Return the Valid (non-suspicious) records from the user's most recent
-    NSA session. Used by the Sentiment page to auto-load input without
-    requiring the user to paste text again.
-    """
+    
     user_id = current_user["sub"]
 
     with get_cursor() as cur:
@@ -524,13 +508,7 @@ def analyse(
     request: AnalyseRequest,
     current_user: dict = Depends(get_current_user),
 ):
-    """
-    Analyse feedback with NSA.
-
-    - If the exact same feedback set has been analysed before (for this user),
-      the cached result is returned immediately — the NSA algorithm is not re-run.
-    - Otherwise the algorithm runs, results are saved to the DB, and returned.
-    """
+   
     feedback = [line.strip() for line in request.feedback if line.strip()]
     if not feedback:
         raise HTTPException(status_code=422, detail="No feedback records provided.")
@@ -574,13 +552,6 @@ def sentiment_analyse(
     request: SentimentRequest,
     _current_user: dict = Depends(get_current_user),
 ):
-    """
-    Run sentiment classification on a list of pre-filtered (Valid) feedback texts.
-
-    Each text is classified as Positive, Negative, or Neutral with a
-    confidence score. Uses HuggingFace DistilBERT when HF_API_TOKEN is set,
-    otherwise falls back to a lexicon-based classifier.
-    """
     texts = [t.strip() for t in request.texts if t.strip()]
     if not texts:
         raise HTTPException(status_code=422, detail="No texts provided.")
@@ -619,24 +590,6 @@ async def upload_dataset(
     description: Optional[str] = Form(None),
     current_user: dict = Depends(get_current_user),
 ):
-    """
-    Upload a dataset file (CSV or JSON) containing feedback records.
-
-    File formats supported:
-
-    CSV:
-    - Must have headers
-    - Looks for columns: 'feedback', 'text', 'comment', 'review', etc.
-    - Falls back to first column if no standard column found
-
-    JSON:
-    - Array of strings: ["feedback 1", "feedback 2"]
-    - Array of objects: [{"text": "feedback 1"}, ...]
-    - Object with array: {"feedback": ["text 1", "text 2"]}
-
-    Returns:
-        Dataset ID and summary information
-    """
     user_id = current_user["sub"]
 
     # Validate file type
@@ -713,13 +666,6 @@ def list_datasets(
     offset: int = 0,
     current_user: dict = Depends(get_current_user),
 ):
-    """
-    List all datasets uploaded by the current user.
-
-    Query parameters:
-    - limit: Maximum number of datasets to return (default: 50)
-    - offset: Number of datasets to skip for pagination (default: 0)
-    """
     user_id = current_user["sub"]
 
     try:
@@ -739,11 +685,6 @@ def get_dataset(
     dataset_id: int,
     current_user: dict = Depends(get_current_user),
 ):
-    """
-    Get detailed information about a specific dataset.
-
-    Only the user who uploaded the dataset can view it.
-    """
     user_id = current_user["sub"]
 
     try:
@@ -769,15 +710,6 @@ def get_dataset_feedback_records(
     offset: int = 0,
     current_user: dict = Depends(get_current_user),
 ):
-    """
-    Get feedback records from a specific dataset.
-
-    Query parameters:
-    - limit: Maximum number of records to return (default: 100)
-    - offset: Number of records to skip for pagination (default: 0)
-
-    Only the user who uploaded the dataset can view its records.
-    """
     user_id = current_user["sub"]
 
     # Verify user owns this dataset
@@ -814,11 +746,6 @@ def delete_dataset_endpoint(
     dataset_id: int,
     current_user: dict = Depends(get_current_user),
 ):
-    """
-    Delete a dataset and all its associated feedback records.
-
-    Only the user who uploaded the dataset can delete it.
-    """
     user_id = current_user["sub"]
 
     try:
@@ -849,15 +776,6 @@ dashboard_router = APIRouter(
 
 @dashboard_router.get("/summary")
 def dashboard_summary(current_user: dict = Depends(get_current_user)):
-    """
-    Return a single aggregated payload for the dashboard.
-
-    Includes:
-    - Dataset counts and total feedback records for this user
-    - Latest NSA session stats (totalRecords, validRecords, suspiciousRecords)
-    - Last 8 activity events derived from real DB rows
-    - Pipeline stage statuses
-    """
     user_id = current_user["sub"]
 
     with get_cursor() as cur:
@@ -999,256 +917,6 @@ def dashboard_summary(current_user: dict = Depends(get_current_user)):
 
 
 # ---------------------------------------------------------------------------
-# Routes — Integration Settings (protected)
-# ---------------------------------------------------------------------------
-
-import secrets as _secrets
-
-settings_router = APIRouter(
-    prefix="/api/settings",
-    tags=["Settings"],
-)
-
-
-class IntegrationSettingsPayload(BaseModel):
-    extApiUrl: Optional[str] = None
-    extApiToken: Optional[str] = None
-    extDataPath: Optional[str] = None
-    extTextField: Optional[str] = "text"
-    extIdField: Optional[str] = "id"
-    webhookUrl: Optional[str] = None
-    webhookSecret: Optional[str] = None
-    webhookEnabled: bool = False
-    nsaThreshold: Optional[float] = None
-    nsaDetectorCount: Optional[int] = None
-    apiKeyLabel: Optional[str] = None
-
-
-class IntegrationSettingsResponse(IntegrationSettingsPayload):
-    apiKey: Optional[str] = None
-    apiKeyCreatedAt: Optional[str] = None
-    updatedAt: Optional[str] = None
-
-
-def _upsert_settings(user_id: int, payload: IntegrationSettingsPayload) -> dict:
-    with get_cursor(commit=True) as cur:
-        cur.execute(
-            """
-            INSERT INTO integration_settings (
-                user_id, ext_api_url, ext_api_token, ext_data_path,
-                ext_text_field, ext_id_field,
-                webhook_url, webhook_secret, webhook_enabled,
-                nsa_threshold, nsa_detector_count,
-                api_key_label, updated_at
-            )
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s, CURRENT_TIMESTAMP)
-            ON CONFLICT (user_id) DO UPDATE SET
-                ext_api_url        = EXCLUDED.ext_api_url,
-                ext_api_token      = EXCLUDED.ext_api_token,
-                ext_data_path      = EXCLUDED.ext_data_path,
-                ext_text_field     = EXCLUDED.ext_text_field,
-                ext_id_field       = EXCLUDED.ext_id_field,
-                webhook_url        = EXCLUDED.webhook_url,
-                webhook_secret     = EXCLUDED.webhook_secret,
-                webhook_enabled    = EXCLUDED.webhook_enabled,
-                nsa_threshold      = EXCLUDED.nsa_threshold,
-                nsa_detector_count = EXCLUDED.nsa_detector_count,
-                api_key_label      = EXCLUDED.api_key_label,
-                updated_at         = CURRENT_TIMESTAMP
-            RETURNING *
-            """,
-            (
-                user_id,
-                payload.extApiUrl,
-                payload.extApiToken,
-                payload.extDataPath,
-                payload.extTextField,
-                payload.extIdField,
-                payload.webhookUrl,
-                payload.webhookSecret,
-                payload.webhookEnabled,
-                payload.nsaThreshold,
-                payload.nsaDetectorCount,
-                payload.apiKeyLabel,
-            ),
-        )
-        return cur.fetchone()
-
-
-def _get_settings(user_id: int) -> dict | None:
-    with get_cursor() as cur:
-        cur.execute(
-            "SELECT * FROM integration_settings WHERE user_id = %s LIMIT 1",
-            (user_id,),
-        )
-        return cur.fetchone()
-
-
-def _row_to_response(row: dict) -> dict:
-    return {
-        "extApiUrl": row.get("ext_api_url"),
-        "extApiToken": row.get("ext_api_token"),
-        "extDataPath": row.get("ext_data_path"),
-        "extTextField": row.get("ext_text_field") or "text",
-        "extIdField": row.get("ext_id_field") or "id",
-        "webhookUrl": row.get("webhook_url"),
-        "webhookSecret": row.get("webhook_secret"),
-        "webhookEnabled": bool(row.get("webhook_enabled")),
-        "nsaThreshold": (
-            float(row["nsa_threshold"]) if row.get("nsa_threshold") else None
-        ),
-        "nsaDetectorCount": row.get("nsa_detector_count"),
-        "apiKey": row.get("api_key"),
-        "apiKeyLabel": row.get("api_key_label"),
-        "apiKeyCreatedAt": (
-            row["api_key_created_at"].isoformat()
-            if row.get("api_key_created_at")
-            else None
-        ),
-        "updatedAt": (row["updated_at"].isoformat() if row.get("updated_at") else None),
-    }
-
-
-@settings_router.get("", response_model=IntegrationSettingsResponse)
-def get_settings(current_user: dict = Depends(get_current_user)):
-    row = _get_settings(current_user["sub"])
-    if not row:
-        return IntegrationSettingsResponse()
-    return _row_to_response(row)
-
-
-@settings_router.put("", response_model=IntegrationSettingsResponse)
-def save_settings(
-    payload: IntegrationSettingsPayload,
-    current_user: dict = Depends(get_current_user),
-):
-    row = _upsert_settings(current_user["sub"], payload)
-    return _row_to_response(row)
-
-
-@settings_router.post("/apikey", response_model=IntegrationSettingsResponse)
-def generate_api_key(
-    current_user: dict = Depends(get_current_user),
-):
-    """Generate a new API key for external systems to call EventSense AI."""
-    new_key = "esa_" + _secrets.token_hex(32)
-    user_id = current_user["sub"]
-
-    with get_cursor(commit=True) as cur:
-        cur.execute(
-            """
-            INSERT INTO integration_settings (user_id, api_key, api_key_created_at, updated_at)
-            VALUES (%s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-            ON CONFLICT (user_id) DO UPDATE SET
-                api_key            = EXCLUDED.api_key,
-                api_key_created_at = CURRENT_TIMESTAMP,
-                updated_at         = CURRENT_TIMESTAMP
-            RETURNING *
-            """,
-            (user_id, new_key),
-        )
-        row = cur.fetchone()
-    return _row_to_response(row)
-
-
-@settings_router.delete("/apikey", response_model=IntegrationSettingsResponse)
-def revoke_api_key(current_user: dict = Depends(get_current_user)):
-    """Revoke (delete) the current API key."""
-    user_id = current_user["sub"]
-    with get_cursor(commit=True) as cur:
-        cur.execute(
-            """
-            UPDATE integration_settings
-            SET api_key = NULL, api_key_created_at = NULL, updated_at = CURRENT_TIMESTAMP
-            WHERE user_id = %s
-            RETURNING *
-            """,
-            (user_id,),
-        )
-        row = cur.fetchone()
-    if not row:
-        return IntegrationSettingsResponse()
-    return _row_to_response(row)
-
-
-@settings_router.post("/test-connection")
-async def test_external_connection(
-    payload: IntegrationSettingsPayload,
-    current_user: dict = Depends(get_current_user),
-):
-    """
-    Test connectivity to the configured external data source.
-    Makes a live GET request from the backend and returns a preview
-    of up to 3 records so the user can confirm field mappings.
-    """
-    import httpx
-
-    url = (payload.extApiUrl or "").strip()
-    if not url:
-        raise HTTPException(status_code=422, detail="No API URL provided.")
-
-    headers = {"Accept": "application/json"}
-    if payload.extApiToken:
-        headers["Authorization"] = f"Bearer {payload.extApiToken.strip()}"
-
-    try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.get(url, headers=headers)
-        resp.raise_for_status()
-        body = resp.json()
-    except httpx.TimeoutException:
-        raise HTTPException(
-            status_code=504, detail="Request timed out after 10 seconds."
-        )
-    except httpx.HTTPStatusError as exc:
-        raise HTTPException(
-            status_code=502,
-            detail=f"Remote server returned {exc.response.status_code}.",
-        )
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail=str(exc))
-
-    # Walk the data path to find the array of records
-    data = body
-    if payload.extDataPath:
-        for key in payload.extDataPath.split("."):
-            if isinstance(data, dict) and key in data:
-                data = data[key]
-            else:
-                raise HTTPException(
-                    status_code=422,
-                    detail=f"Path '{payload.extDataPath}' not found in response.",
-                )
-
-    if not isinstance(data, list):
-        raise HTTPException(
-            status_code=422,
-            detail="Resolved path does not contain an array. Check the data path.",
-        )
-
-    text_field = payload.extTextField or "text"
-    id_field = payload.extIdField or "id"
-
-    preview = []
-    for item in data[:3]:
-        if isinstance(item, str):
-            preview.append({"id": None, "text": item})
-        elif isinstance(item, dict):
-            preview.append(
-                {
-                    "id": item.get(id_field),
-                    "text": item.get(text_field, ""),
-                }
-            )
-
-    return {
-        "success": True,
-        "totalRecords": len(data),
-        "preview": preview,
-    }
-
-
-# ---------------------------------------------------------------------------
 # Register routers
 # ---------------------------------------------------------------------------
 
@@ -1257,4 +925,3 @@ app.include_router(datasets_router)
 app.include_router(nsa_router)
 app.include_router(sentiment_router)
 app.include_router(dashboard_router)
-app.include_router(settings_router)
