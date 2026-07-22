@@ -33,10 +33,20 @@ from dataclasses import dataclass, field
 from typing import List, Optional
 from database import get_cursor
 import json
+import nltk
+from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.preprocessing import Normalizer
 
+# Run once
+nltk.download("punkt")
+nltk.download("stopwords")
 # ---------------------------------------------------------------------------
 # Constants - # Helper function to load stop words from database
 # ---------------------------------------------------------------------------
+# STOP_WORDS = set(stopwords.words("english"))
+
 
 def load_stopawords_from_db() -> set[str]:
     """
@@ -81,6 +91,7 @@ def load_stopawords_from_db() -> set[str]:
             )
 
         return [record["raw_text"] for record in records]
+
 
 # ---------------------------------------------------------------------------
 # Helper function to load normal corpus from database
@@ -143,6 +154,7 @@ def load_normal_corpus_from_db() -> list[str]:
 # Data classes
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class Detector:
     """
@@ -202,7 +214,7 @@ def preprocess(text: str) -> str:
         "BUY NOW!! CLICK FREE$$$" -> "buy now  click free"
     """
     text = text.lower()
-    # Replace punctuation with space 
+    # Replace punctuation with space
     text = text.translate(
         str.maketrans(string.punctuation, " " * len(string.punctuation))
     )
@@ -226,46 +238,54 @@ def tokenise(text: str) -> list[str]:
     return tokens
 
 
+# using nltk
+# def tokenise(text: str) -> list[str]:
+#     cleaned = preprocess(text)
+#     stop_words = load_stopawords_from_db()
+#         #""" and token.lower() not in STOP_WORDS """
+
+#     return [
+#         token.lower()
+#         for token in word_tokenize(cleaned)
+#         if token.isalpha()
+#         and token.lower() not in stop_words
+#         and len(token) >= 2
+#     ]
+
+
 # ---------------------------------------------------------------------------
 # Vectorisation — pure Python bag-of-words (no sklearn)
 # ---------------------------------------------------------------------------
 
 
+vectorizer = CountVectorizer(tokenizer=tokenise, lowercase=False, token_pattern=None)
+normalizer = Normalizer(norm="l2")
+
+
 def build_vocabulary(corpus: list[str]) -> list[str]:
     """
-    Build a sorted vocabulary list from a list of raw text strings.
-    Each unique token across the corpus becomes one dimension.
+    Fit the CountVectorizer to the corpus and return the sorted vocabulary.
     """
-    vocab: set[str] = set()
-    for text in corpus:
-        vocab.update(tokenise(text))
-    return sorted(vocab)
+    vectorizer.fit(corpus)
+    return vectorizer.get_feature_names_out().tolist()
 
 
-def text_to_vector(text: str, vocabulary: list[str]) -> list[float]:
+def text_to_vector(text: str, vocabulary: list[str] | None = None) -> list[float]:
     """
-    Convert text to a normalised term-frequency vector over the vocabulary.
+    Convert text to an L2-normalised term-frequency vector using the fitted
+    CountVectorizer.
 
-    Steps:
-      1. Tokenise the text.
-      2. Count how often each vocabulary term appears (term frequency).
-      3. L2-normalise so all vectors have unit length (enables meaningful
-         cosine / Euclidean distance comparisons).
-
-    If all counts are zero (out-of-vocabulary text), return a zero vector.
+    The vocabulary parameter is kept only for backwards compatibility and
+    is ignored because the fitted vectorizer already stores the vocabulary.
     """
-    tokens = tokenise(text)
-    token_count = len(tokens)
+    vector = vectorizer.transform([text])
 
-    # Raw count vector
-    raw: list[float] = [float(tokens.count(term)) for term in vocabulary]
+    if vector.nnz == 0:
+        # Out-of-vocabulary text -> zero vector
+        return vector.toarray()[0].tolist()
 
-    # L2 normalisation
-    norm = math.sqrt(sum(v * v for v in raw))
-    if norm == 0:
-        return raw  # zero vector — text has no known tokens (suspicious by design)
-
-    return [v / norm for v in raw]
+    vector = normalizer.transform(vector)
+    return vector.toarray()[0].tolist()
 
 
 # ---------------------------------------------------------------------------
@@ -274,8 +294,9 @@ def text_to_vector(text: str, vocabulary: list[str]) -> list[float]:
 
 
 def euclidean_distance(v1: list[float], v2: list[float]) -> float:
-    """Standard Euclidean distance between two equal-length vectors."""
-    return math.sqrt(sum((a - b) ** 2 for a, b in zip(v1, v2)))
+    return math.sqrt(
+        sum((a - b) ** 2 for a, b in zip(v1, v2))
+    )  # TODO further understanding
 
 
 # ---------------------------------------------------------------------------
@@ -304,7 +325,7 @@ class NegativeSelectionAlgorithm:
         detector_radius: float = 0.55,
         self_match_threshold: float = 0.40,
         max_attempts: int = 5000,
-        random_seed: int = 42,
+        random_seed: int = 90,
     ) -> None:
         self.detector_count = detector_count
         self.detector_radius = detector_radius
@@ -433,7 +454,6 @@ class NegativeSelectionAlgorithm:
                 anomaly_reason="Matched NSA detector — pattern deviates from normal feedback",
             )
 
-        # No detector matched -> check for zero-vector (fully OOV text)
         if all(v == 0.0 for v in feature_vector):
             return NSAResult(
                 id=record_id,
@@ -583,10 +603,10 @@ def get_nsa() -> NegativeSelectionAlgorithm:
         normal_corpus = load_normal_corpus_from_db()
 
         _nsa_instance = NegativeSelectionAlgorithm(
-            detector_count=60,
-            detector_radius=0.55,
-            self_match_threshold=0.40,
-            max_attempts=5000,
+            detector_count=200,
+            detector_radius=0.40,
+            self_match_threshold=0.75,
+            max_attempts=10000,
             random_seed=42,
         )
         _nsa_instance.train(normal_corpus)

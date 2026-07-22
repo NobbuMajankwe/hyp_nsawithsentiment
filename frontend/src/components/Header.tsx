@@ -11,7 +11,7 @@ import {
   Typography,
 } from '@mui/material';
 import {
-  BarChart2,
+  //BarChart2,
   BrainCircuit,
   ChevronLeft,
   ChevronRight,
@@ -44,10 +44,10 @@ const NAV_ITEMS: NavItem[] = [
   { path: '/dashboard', icon: <Gauge size={18} />,      label: 'Dashboard',     sublabel: 'Overview' },
   { path: '/nsa',       icon: <ShieldCheck size={18} />, label: 'NSA Analysis',  sublabel: 'Anomaly detection' },
   { path: '/sentiment', icon: <BrainCircuit size={18} />,label: 'Sentiment',     sublabel: 'Classify sentiment' },
-  { path: '/insight',   icon: <FileText size={18} />,    label: 'Insight Story', sublabel: 'Coming soon' },
+  { path: '/insight',   icon: <FileText size={18} />,    label: 'Insight Reports', sublabel: 'Coming soon' },
   { path: '/settings',  icon: <Settings2 size={18} />,   label: 'Settings',      sublabel: 'Configuration' },
-  { path: '/analytics', icon: <BarChart2 size={18} />,   label: 'Analytics',     sublabel: 'Reports' },
-];
+  /* { path: '/analytics', icon: <BarChart2 size={18} />,   label: 'Analytics',     sublabel: 'Reports' },*/
+]; 
 
 const DARK_BG    = '#050816';
 const PANEL_BG   = '#020617';

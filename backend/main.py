@@ -194,6 +194,7 @@ app.add_middleware(
         "http://localhost:5173",
         "http://127.0.0.1:5173",
         "http://localhost:3000",
+        "http://localhost:3001",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -259,9 +260,9 @@ class ResetPasswordRequest(BaseModel):
     newPassword: str
 
 
-# ---------------------------------------------------------------------------
+# -----------------------------------------------------------------------------------
 # NSA schemas
-# ---------------------------------------------------------------------------
+# -----------------------------------------------------------------------------------
 
 
 class AnalyseRequest(BaseModel):
@@ -330,9 +331,9 @@ class DatasetFeedbackResponse(BaseModel):
     records: List[FeedbackRecord]
 
 
-# ---------------------------------------------------------------------------
+# -------------------------------------------------------------------------------------------------
 # Sentiment schemas
-# ---------------------------------------------------------------------------
+# -------------------------------------------------------------------------------------------------
 
 
 class SentimentRequest(BaseModel):
@@ -360,9 +361,9 @@ class SentimentResponse(BaseModel):
     results: List[SentimentItem]
 
 
-# ---------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 
 
 def _nsa_result_to_item(r: NSAResult) -> ResultItem:
@@ -377,9 +378,9 @@ def _nsa_result_to_item(r: NSAResult) -> ResultItem:
     )
 
 
-# ---------------------------------------------------------------------------
+# -------------------------------------------------------------------------------
 # Routes — health
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------------
 
 
 @app.get("/")
@@ -387,9 +388,9 @@ def health_check():
     return {"status": "ok", "service": "EventSense AI"}
 
 
-# ---------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------
 # Routes — auth
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 
 
 @auth_router.post("/register", response_model=AuthResponse, status_code=201)
@@ -476,9 +477,9 @@ def reset_password(body: ResetPasswordRequest):
     }
 
 
-# ---------------------------------------------------------------------------
+# -------------------------------------------------------------------------------------
 # Routes — NSA analysis (protected)
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------------------------
 
 
 @nsa_router.get("/latest-valid")
@@ -554,12 +555,12 @@ def analyse(
     user_id = current_user["sub"]
     input_hash = _feedback_hash(feedback)
 
-    # ── Cache hit ──────────────────────────────────────────────────────────
-    cached = _load_cached_session(user_id, input_hash)
+    # ── Cache hit ──────────────────────────────────────────────────────────-------- #todo uncomment when figured out how to store
+    """ cached = _load_cached_session(user_id, input_hash) 
     if cached:
-        return AnalyseResponse(**cached)
+        return AnalyseResponse(**cached) """
 
-    # ── Cache miss — run NSA ───────────────────────────────────────────────
+    # ── Cache miss — run NSA ───────────────────────────────────────────────----------
     nsa = get_nsa()
     response_data = nsa.detect_batch(feedback)
 
@@ -623,9 +624,9 @@ def sentiment_analyse(
     )
 
 
-# ---------------------------------------------------------------------------
+# -------------------------------------------------------------------------------------
 # Routes — Dataset management (protected)
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------
 
 
 @datasets_router.post("/upload", status_code=201)
@@ -938,7 +939,7 @@ def dashboard_summary(current_user: dict = Depends(get_current_user)):
             """
             (
                 SELECT
-                    'nsa_scan'          AS event_type,
+                    'nsa_scan' AS event_type,
                     'NSA scan completed' AS title,
                     total_records::TEXT AS detail,
                     created_at
@@ -950,10 +951,10 @@ def dashboard_summary(current_user: dict = Depends(get_current_user)):
             UNION ALL
             (
                 SELECT
-                    'dataset_loaded'    AS event_type,
-                    'Dataset loaded'    AS title,
-                    source_name         AS detail,
-                    loaded_at           AS created_at
+                    'dataset_loaded' AS event_type,
+                    'Dataset loaded' AS title,
+                    source_name AS detail,
+                    loaded_at AS created_at
                 FROM datasets
                 WHERE loaded_by = %s
                 ORDER BY loaded_at DESC
@@ -962,9 +963,9 @@ def dashboard_summary(current_user: dict = Depends(get_current_user)):
             UNION ALL
             (
                 SELECT
-                    'account_created'       AS event_type,
-                    'User account created'  AS title,
-                    full_name               AS detail,
+                    'account_created' AS event_type,
+                    'User account created' AS title,
+                    full_name AS detail,
                     created_at
                 FROM users
                 WHERE user_id = %s

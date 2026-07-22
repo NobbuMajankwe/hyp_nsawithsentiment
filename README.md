@@ -56,7 +56,7 @@ npm install
 npm run dev
 ```
 
-UI will be available at `http://localhost:5173`.
+UI will be available at `http://localhost:3001`.
 
 > Make sure the backend is running first so the NSA analysis button works.
 

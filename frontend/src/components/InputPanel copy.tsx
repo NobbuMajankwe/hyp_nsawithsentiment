@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useRef, useState } from "react";
 import {
   Alert,
@@ -6,7 +5,6 @@ import {
   Button,
   CircularProgress,
   Collapse,
-  //Divider,
   Paper,
   Stack,
   TextField,
@@ -15,13 +13,12 @@ import {
   Typography,
 } from "@mui/material";
 import {
+  CloudDownload,
   FileText,
+  Link,
   RotateCcw,
   Upload,
   Zap,
-  //Download,
-  Link,
-  CloudDownload,
 } from "lucide-react";
 
 interface Props {
@@ -31,7 +28,6 @@ interface Props {
   onReset: () => void;
   loading: boolean;
 }
-
 
 type InputMethod = "api" | "file";
 
@@ -53,7 +49,6 @@ const ARRAY_KEYS = [
   "reviews",
   "records",
   "data",
-  "Data",
   "items",
   "results",
   "products",
@@ -62,17 +57,14 @@ const ARRAY_KEYS = [
 function cleanText(value: string): string {
   return value.replace(/\s+/g, " ").trim();
 }
-// ---------------------------------------------------------------------------
-// File and API response parsing helpers
-// ---------------------------------------------------------------------------
 
 function parseTxt(text: string): string {
   return text
-    .split("\n")
-    .map(cleanText)  
+    .split(/\r?\n/)
+    .map(cleanText)
     .filter(Boolean)
     .join("\n");
-}//.map((l) => l.trim())
+}
 
 function detectDelimiter(headerLine: string): "," | ";" {
   const commaCount = (headerLine.match(/,/g) ?? []).length;
@@ -109,59 +101,42 @@ function splitCsvLine(line: string, delimiter: "," | ";"): string[] {
 
 function parseCsv(text: string): string {
   const lines = text
-    .split("\n")
-    .map((l) => l.trim())
+    .split(/\r?\n/)
+    .map((line) => line.trim())
     .filter(Boolean);
 
-  if (lines.length === 0) return "";
+  if (lines.length < 2) return "";
 
   const delimiter = detectDelimiter(lines[0]);
   const headers = splitCsvLine(lines[0], delimiter).map((header) =>
     header.toLowerCase().replace(/^"|"$/g, "").trim(),
   );
 
-  const feedbackNotKeywords = ["id", "date", "name"];
-  const feedbackKeywords = [
-    "feedback",
-    "text",
-    "comment",
-    "response",
-    "review",
-    "message",
-    "body"
-  ];
+  let columnIndex = headers.findIndex((header) =>
+    TEXT_KEYS.some(
+      (keyword) =>
+        header === keyword ||
+        header.startsWith(`${keyword}_`) ||
+        header.endsWith(`_${keyword}`) ||
+        header.includes(keyword),
+    ),
+  );
 
-  let colIndex = headers.findIndex((header) => {
-    const h = header.toLowerCase();
-    const hasKeyword = feedbackKeywords.some((kw) => h.includes(kw));
-    const hasExcludedKeyword = feedbackNotKeywords.some((kw) =>
-      h.includes(kw),
-    );
+  if (columnIndex === -1) {
+    columnIndex = 0;
+  }
 
-    // console.log(hasKeyword);
-    // console.log(hasExcludedKeyword);
-    // console.log(hasKeyword + ": " + !hasExcludedKeyword);
-    // console.log(hasKeyword && !hasExcludedKeyword);
-
-    return hasKeyword && !hasExcludedKeyword;
-  });
-
-  if (colIndex === -1) colIndex = 0;
-
-  const dataLines = lines.slice(1);
-
-  return dataLines
+  return lines
+    .slice(1)
     .map((line) => {
-      const cols = splitCsvLine(line,delimiter);
-      return (cols[colIndex] ?? "").replace(/^"|"$/g, "").trim();
+      const columns = splitCsvLine(line, delimiter);
+      return cleanText((columns[columnIndex] ?? "").replace(/^"|"$/g, ""));
     })
     .filter(Boolean)
     .join("\n");
 }
 
-
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function extractFeedbacks(value: unknown): string[] {
+function extractFeedback(value: unknown): string[] {
   if (typeof value === "string") {
     const text = cleanText(value);
     return text ? [text] : [];
@@ -201,96 +176,6 @@ function extractFeedbacks(value: unknown): string[] {
 
     if (matchingKey) {
       records.push(...extractFeedback(objectValue[matchingKey]));
-    }
-  }
-
-  return records;
-}
-
-function extractFeedback(value: unknown): string[] {
-  if (typeof value === "string") {
-    const text = cleanText(value);
-    return text ? [text] : [];
-  }
-
-  if (Array.isArray(value)) {
-    return value.flatMap(extractFeedback);
-  }
-
-  if (!value || typeof value !== "object") {
-    return [];
-  }
-
-  const objectValue = value as Record<string, unknown>;
-  const objectKeys = Object.keys(objectValue);
-
-  // Handle API wrapper properties such as:
-  // Data, data, results, items, records, feedbacks, etc.
-  for (const arrayKey of ARRAY_KEYS) {
-    const matchingKey = objectKeys.find(
-      (key) => key.toLowerCase() === arrayKey.toLowerCase(),
-    );
-
-    if (matchingKey && Array.isArray(objectValue[matchingKey])) {
-      return extractFeedback(objectValue[matchingKey]);
-    }
-  }
-
-  // Explicitly support this API's top-level "Data" property,
-  // even when "data" is not included in ARRAY_KEYS.
-  const dataKey = objectKeys.find(
-    (key) => key.toLowerCase() === "data",
-  );
-
-  if (dataKey && Array.isArray(objectValue[dataKey])) {
-    return extractFeedback(objectValue[dataKey]);
-  }
-
-  const records: string[] = [];
-
-  // First extract fields such as feedback, review, comment, message, etc.
-  for (const [key, itemValue] of Object.entries(objectValue)) {
-    const normalizedKey = key.toLowerCase();
-
-    if (
-      typeof itemValue === "string" &&
-      TEXT_KEYS.some((textKey) =>
-        normalizedKey.includes(textKey.toLowerCase()),
-      )
-    ) {
-      const text = cleanText(itemValue);
-
-      if (text) {
-        records.push(text);
-      }
-    }
-  }
-
-  // This API sometimes has no written feedback but has answers
-  // in the "questions" array.
-  const questionsKey = objectKeys.find(
-    (key) => key.toLowerCase() === "questions",
-  );
-
-  if (questionsKey && Array.isArray(objectValue[questionsKey])) {
-    const questions = extractFeedback(objectValue[questionsKey]);
-
-    // Use questions only when written feedback is empty.
-    if (records.length === 0) {
-      records.push(...questions);
-    }
-  }
-
-  // Search nested objects only when nothing has been extracted yet.
-  if (records.length === 0) {
-    for (const itemValue of Object.values(objectValue)) {
-      if (
-        itemValue &&
-        typeof itemValue === "object" &&
-        !Array.isArray(itemValue)
-      ) {
-        records.push(...extractFeedback(itemValue));
-      }
     }
   }
 
@@ -346,19 +231,13 @@ async function fetchApiFeedback(apiUrl: string): Promise<string> {
   const contentType = response.headers.get("content-type") ?? "";
 
   if (contentType.includes("application/json")) {
-    const data: unknown = await response.json();    
-    //const dataWithWrapper: unknown = await ((response as unknown as any).Data).json();
-
-    return parseJsonValue(data);//|| parseJsonValue(dataWithWrapper);
+    const data: unknown = await response.json();
+    return parseJsonValue(data);
   }
 
   const text = await response.text();
   return parseTxt(text);
 }
-
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
 
 export function InputPanel({
   value,
