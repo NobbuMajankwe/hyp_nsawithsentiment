@@ -422,7 +422,7 @@ class NegativeSelectionAlgorithm:
     # Detection phase
     # ------------------------------------------------------------------
 
-    def detect_one(self, text: str, record_id: int) -> NSAResult:
+    def detect_oneold(self, text: str, record_id: int) -> NSAResult:
         """
         Run a single feedback string through the detection pipeline.
 
@@ -473,6 +473,92 @@ class NegativeSelectionAlgorithm:
             nsa_status="Valid",
             anomaly_score=0,
             anomaly_reason="No detector match",
+        )
+
+    def detect_one(self, text: str, record_id: int) -> NSAResult:
+        cleaned = preprocess(text)
+        tokens = tokenise(text)
+        feature_vector = text_to_vector(text, self.vocabulary)
+
+        # Handle empty/OOV text before checking detectors
+        if all(value == 0.0 for value in feature_vector):
+            return NSAResult(
+                id=record_id,
+                original_text=text,
+                cleaned_text=cleaned,
+                tokens=tokens,
+                nsa_status="Suspicious",
+                anomaly_score=100,
+                anomaly_reason=(
+                    "No recognised vocabulary tokens from the normal training corpus"
+                ),
+            )
+
+        # Distance to the closest normal/self example
+        closest_self_distance = min(
+            euclidean_distance(feature_vector, self_vector)
+            for self_vector in self.self_vectors
+        )
+
+        # Detector distances
+        detector_distances = [
+            euclidean_distance(feature_vector, detector.vector)
+            for detector in self.detectors
+        ]
+
+        closest_detector_distance = min(detector_distances)
+
+        # A detector matches when the input falls within its radius
+        detector_matched = closest_detector_distance <= self.detector_radius
+
+        if detector_matched:
+            # 100 at detector centre, approaching 50 near radius boundary
+            detector_strength = max(
+                0.0,
+                1.0 - (closest_detector_distance / self.detector_radius),
+            )
+
+            # Include distance from normal/self feedback
+            self_deviation = min(
+                1.0,
+                closest_self_distance / math.sqrt(2),
+            )
+
+            combined_score = detector_strength * 0.6 + self_deviation * 0.4
+
+            anomaly_score = max(51, round(combined_score * 100))
+
+            return NSAResult(
+                id=record_id,
+                original_text=text,
+                cleaned_text=cleaned,
+                tokens=tokens,
+                nsa_status="Suspicious",
+                anomaly_score=anomaly_score,
+                anomaly_reason=(
+                    "Matched an NSA detector and deviates from normal feedback"
+                ),
+            )
+
+        # Variable score for valid feedback based on distance from self-space
+        normalised_self_distance = min(
+            1.0,
+            closest_self_distance / math.sqrt(2),
+        )
+
+        anomaly_score = min(
+            50,
+            round(normalised_self_distance * 50),
+        )
+
+        return NSAResult(
+            id=record_id,
+            original_text=text,
+            cleaned_text=cleaned,
+            tokens=tokens,
+            nsa_status="Valid",
+            anomaly_score=anomaly_score,
+            anomaly_reason="No detector match; score reflects distance from normal feedback",
         )
 
     def detect_batch(self, feedback_list: list[str]) -> NSAResponse:
