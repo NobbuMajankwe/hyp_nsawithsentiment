@@ -87,6 +87,34 @@ export async function fetchLatestValidRecords(
 }
 
 // ---------------------------------------------------------------------------
+// NSA config (requires token)
+// ---------------------------------------------------------------------------
+
+export interface NsaConfig {
+  detectorCount: number;
+  detectorRadius: number;
+  selfMatchThreshold: number;
+  apiUrl: string | null;
+}
+
+export async function fetchNsaConfig(token: string): Promise<NsaConfig> {
+  const { data } = await apiClient.get<NsaConfig>('/api/nsa/config', {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return data;
+}
+
+export async function saveNsaConfig(
+  token: string,
+  config: Partial<NsaConfig>,
+): Promise<NsaConfig> {
+  const { data } = await apiClient.put<NsaConfig>('/api/nsa/config', config, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return data;
+}
+
+// ---------------------------------------------------------------------------
 // NSA analysis (requires token)
 // ---------------------------------------------------------------------------
 
@@ -101,10 +129,11 @@ export interface AnalyseResponse {
 export async function runNsaAnalysis(
   feedback: string[],
   token: string,
+  configOverrides?: Partial<Pick<NsaConfig, 'detectorCount' | 'detectorRadius' | 'selfMatchThreshold'>>,
 ): Promise<AnalyseResponse> {
   const { data } = await apiClient.post<AnalyseResponse>(
     '/api/nsa/analyse',
-    { feedback },
+    { feedback, ...configOverrides },
     { headers: { Authorization: `Bearer ${token}` } },
   );
   return data;

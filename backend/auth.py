@@ -16,10 +16,8 @@ from database import get_cursor
 
 
 JWT_SECRET: str = os.getenv("JWT_SECRET", "eventsense-dev-secret-change-in-prod")
-JWT_EXPIRY_SECONDS: int = 60 * 60 * 8
-
-VALID_ROLES = {"EVENT_ORGANISER", "SYSTEM_ADMIN"}
-
+JWT_EXPIRY_SECONDS: int = 60 * 60 * 8 #8 HOURS
+VALID_ROLES = {"EVENT_ORGANISER", "SYSTEM_ADMIN"} # For now have similar roles
 
 @dataclass
 class UserRecord:

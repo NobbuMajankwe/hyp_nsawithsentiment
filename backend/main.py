@@ -15,7 +15,13 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 from typing import List, Literal, Optional
 from auth import reset_user_password
-from nsa import get_nsa, NSAResult
+from nsa import (
+    get_nsa,
+    NSAResult,
+    NSA_DEFAULT_DETECTOR_COUNT,
+    NSA_DEFAULT_DETECTOR_RADIUS,
+    NSA_DEFAULT_SELF_MATCH_THRESHOLD,
+)
 from auth import (
     authenticate_user,
     create_access_token,
@@ -135,6 +141,65 @@ def _save_session(user_id: int, input_hash: str, response: "AnalyseResponse") ->
 
 
 # ---------------------------------------------------------------------------
+# NSA config helpers
+# ---------------------------------------------------------------------------
+
+
+def _get_user_nsa_config(user_id: int) -> dict:
+    """Return the user's saved NSA config, falling back to defaults."""
+    with get_cursor() as cur:
+        cur.execute(
+            """
+            SELECT nsa_detector_count, nsa_threshold, nsa_api_url
+            FROM integration_settings
+            WHERE user_id = %s
+            """,
+            (user_id,),
+        )
+        row = cur.fetchone()
+
+    if row:
+        return {
+            "detectorCount": row["nsa_detector_count"] or NSA_DEFAULT_DETECTOR_COUNT,
+            "detectorRadius": (
+                float(row["nsa_threshold"])
+                if row["nsa_threshold"] is not None
+                else NSA_DEFAULT_DETECTOR_RADIUS
+            ),
+            "selfMatchThreshold": NSA_DEFAULT_SELF_MATCH_THRESHOLD,
+            "apiUrl": row["nsa_api_url"],
+        }
+    return {
+        "detectorCount": NSA_DEFAULT_DETECTOR_COUNT,
+        "detectorRadius": NSA_DEFAULT_DETECTOR_RADIUS,
+        "selfMatchThreshold": NSA_DEFAULT_SELF_MATCH_THRESHOLD,
+        "apiUrl": None,
+    }
+
+
+def _upsert_user_nsa_config(user_id: int, config: dict) -> None:
+    """Persist the user's NSA config into integration_settings."""
+    with get_cursor(commit=True) as cur:
+        cur.execute(
+            """
+            INSERT INTO integration_settings (user_id, nsa_detector_count, nsa_threshold, nsa_api_url)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (user_id) DO UPDATE SET
+                nsa_detector_count = COALESCE(EXCLUDED.nsa_detector_count, integration_settings.nsa_detector_count),
+                nsa_threshold      = COALESCE(EXCLUDED.nsa_threshold,       integration_settings.nsa_threshold),
+                nsa_api_url        = COALESCE(EXCLUDED.nsa_api_url,         integration_settings.nsa_api_url),
+                updated_at         = CURRENT_TIMESTAMP
+            """,
+            (
+                user_id,
+                config.get("detectorCount"),
+                config.get("detectorRadius"),
+                config.get("apiUrl"),
+            ),
+        )
+
+
+# ---------------------------------------------------------------------------
 # App setup
 # ---------------------------------------------------------------------------
 
@@ -241,8 +306,26 @@ class ResetPasswordRequest(BaseModel):
 # -----------------------------------------------------------------------------------
 
 
+class NsaConfigResponse(BaseModel):
+    detectorCount: int
+    detectorRadius: float
+    selfMatchThreshold: float
+    apiUrl: Optional[str]
+
+
+class NsaConfigRequest(BaseModel):
+    detectorCount: Optional[int] = None
+    detectorRadius: Optional[float] = None
+    selfMatchThreshold: Optional[float] = None
+    apiUrl: Optional[str] = None
+
+
 class AnalyseRequest(BaseModel):
     feedback: List[str]
+    # Optional per-run config overrides; if omitted, user's saved config is used
+    detectorCount: Optional[int] = None
+    detectorRadius: Optional[float] = None
+    selfMatchThreshold: Optional[float] = None
 
 
 class ResultItem(BaseModel):
@@ -455,7 +538,7 @@ def reset_password(body: ResetPasswordRequest):
 
 @nsa_router.get("/latest-valid")
 def get_latest_valid_records(current_user: dict = Depends(get_current_user)):
-    
+
     user_id = current_user["sub"]
 
     with get_cursor() as cur:
@@ -503,12 +586,65 @@ def get_latest_valid_records(current_user: dict = Depends(get_current_user)):
     }
 
 
+@nsa_router.get("/config", response_model=NsaConfigResponse)
+def get_nsa_config(current_user: dict = Depends(get_current_user)):
+    """Return the calling user's saved NSA configuration."""
+    return _get_user_nsa_config(current_user["sub"])
+
+
+@nsa_router.put("/config", response_model=NsaConfigResponse)
+def update_nsa_config(
+    body: NsaConfigRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """Persist the user's NSA configuration overrides."""
+    user_id = current_user["sub"]
+
+    # Validate ranges before storing
+    if body.detectorCount is not None and not (1 <= body.detectorCount <= 2000):
+        raise HTTPException(
+            status_code=422, detail="detectorCount must be between 1 and 2000."
+        )
+    if body.detectorRadius is not None and not (0.01 <= body.detectorRadius <= 1.0):
+        raise HTTPException(
+            status_code=422, detail="detectorRadius must be between 0.01 and 1.0."
+        )
+    if body.selfMatchThreshold is not None and not (
+        0.01 <= body.selfMatchThreshold <= 1.0
+    ):
+        raise HTTPException(
+            status_code=422, detail="selfMatchThreshold must be between 0.01 and 1.0."
+        )
+
+    current = _get_user_nsa_config(user_id)
+    merged = {
+        "detectorCount": (
+            body.detectorCount
+            if body.detectorCount is not None
+            else current["detectorCount"]
+        ),
+        "detectorRadius": (
+            body.detectorRadius
+            if body.detectorRadius is not None
+            else current["detectorRadius"]
+        ),
+        "selfMatchThreshold": (
+            body.selfMatchThreshold
+            if body.selfMatchThreshold is not None
+            else current["selfMatchThreshold"]
+        ),
+        "apiUrl": body.apiUrl if body.apiUrl is not None else current["apiUrl"],
+    }
+    _upsert_user_nsa_config(user_id, merged)
+    return merged
+
+
 @nsa_router.post("/analyse", response_model=AnalyseResponse)
 def analyse(
     request: AnalyseRequest,
     current_user: dict = Depends(get_current_user),
 ):
-   
+
     feedback = [line.strip() for line in request.feedback if line.strip()]
     if not feedback:
         raise HTTPException(status_code=422, detail="No feedback records provided.")
@@ -516,13 +652,35 @@ def analyse(
     user_id = current_user["sub"]
     input_hash = _feedback_hash(feedback)
 
+    # ── Resolve config: per-request overrides > user saved config > defaults ──
+    saved_config = _get_user_nsa_config(user_id)
+    detector_count = (
+        request.detectorCount
+        if request.detectorCount is not None
+        else saved_config["detectorCount"]
+    )
+    detector_radius = (
+        request.detectorRadius
+        if request.detectorRadius is not None
+        else saved_config["detectorRadius"]
+    )
+    self_match_threshold = (
+        request.selfMatchThreshold
+        if request.selfMatchThreshold is not None
+        else saved_config["selfMatchThreshold"]
+    )
+
     # ── Cache hit ──────────────────────────────────────────────────────────-------- #todo uncomment when figured out how to store
     """ cached = _load_cached_session(user_id, input_hash) 
     if cached:
         return AnalyseResponse(**cached) """
 
     # ── Cache miss — run NSA ───────────────────────────────────────────────----------
-    nsa = get_nsa()
+    nsa = get_nsa(
+        detector_count=detector_count,
+        detector_radius=detector_radius,
+        self_match_threshold=self_match_threshold,
+    )
     response_data = nsa.detect_batch(feedback)
 
     result = AnalyseResponse(

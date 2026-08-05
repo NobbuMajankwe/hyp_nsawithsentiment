@@ -1,5 +1,3 @@
-
-
 from __future__ import annotations
 
 import os
@@ -261,6 +259,7 @@ CREATE TABLE IF NOT EXISTS integration_settings (
     -- NSA engine overrides (per-user; falls back to system_configuration)
     nsa_threshold   NUMERIC(10,4),
     nsa_detector_count INTEGER,
+    nsa_api_url     TEXT,
 
     -- API key for external systems calling EventSense
     api_key         TEXT UNIQUE,
@@ -287,6 +286,19 @@ ON otp_codes(email, purpose);
 """
 
 
+MIGRATE_NSA_API_URL = """
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name='integration_settings' AND column_name='nsa_api_url'
+    ) THEN
+        ALTER TABLE integration_settings ADD COLUMN nsa_api_url TEXT;
+    END IF;
+END$$;
+"""
+
+
 def init_db() -> None:
     statements = [
         CREATE_USERS_TABLE,
@@ -304,6 +316,7 @@ def init_db() -> None:
         CREATE_NSA_SESSION_RESULTS_TABLE,
         CREATE_OTP_TABLE,
         CREATE_INTEGRATION_SETTINGS_TABLE,
+        MIGRATE_NSA_API_URL,
     ]
 
     with get_cursor(commit=True) as cur:

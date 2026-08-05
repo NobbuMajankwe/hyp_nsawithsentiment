@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Alert, Box, Snackbar, Stack } from "@mui/material";
 import { Activity, ShieldCheck } from "lucide-react";
 
@@ -6,13 +6,10 @@ import { PageLayout } from "../components/PageLayout";
 import { PageHero } from "../components/PageHero";
 import { InputPanel } from "../components/InputPanel";
 import { FeedbackCanvas } from "../components/FeedbackCanvas";
-//import { FindingsPanel } from "../components/FindingsPanel";
 import { PipelineTracker } from "../components/PipelineTracker";
-//import { AnalyticsCharts } from "../components/AnalyticsCharts";
 
-//import { SAMPLE_TEXT } from "../data/mockFeedback";
 import { buildSteps } from "../data/pipelineSteps";
-import { runNsaAnalysis, type AnalyseResponse } from "../services/api";
+import { runNsaAnalysis, fetchNsaConfig, type AnalyseResponse, type NsaConfig } from "../services/api";
 import type { AnalysisResult } from "../types";
 import { useAuth } from "../context/AuthContext";
 import { SignalSummaryPanel } from "../components/SignalSummaryPanel";
@@ -24,6 +21,15 @@ export function NsaPage() {
   const [summary, setSummary] = useState<AnalyseResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [nsaConfig, setNsaConfig] = useState<NsaConfig | null>(null);
+
+  // Load the user's saved config on load
+  useEffect(() => {
+    if (!token) return;
+    fetchNsaConfig(token)
+      .then((cfg) => setNsaConfig(cfg))
+      .catch(() => {});
+  }, [token]);
 
   async function handleRun() {
     const lines = datasetText.split("\n").filter((l) => l.trim());
@@ -31,7 +37,17 @@ export function NsaPage() {
     setLoading(true);
     setError(null);
     try {
-      const data = await runNsaAnalysis(lines, token);
+      const data = await runNsaAnalysis(
+        lines,
+        token,
+        nsaConfig
+          ? {
+              detectorCount: nsaConfig.detectorCount,
+              detectorRadius: nsaConfig.detectorRadius,
+              selfMatchThreshold: nsaConfig.selfMatchThreshold,
+            }
+          : undefined,
+      );
       setResults(data.results);
       setSummary(data);
     } catch (err: unknown) {

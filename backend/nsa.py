@@ -1,5 +1,3 @@
-
-
 from __future__ import annotations
 
 import math
@@ -538,7 +536,7 @@ class NegativeSelectionAlgorithm:
         )
 
     def detect_batch(self, feedback_list: list[str]) -> NSAResponse:
-    
+
         results = []
 
         with get_cursor(commit=True) as cur:
@@ -641,25 +639,45 @@ class NegativeSelectionAlgorithm:
 
 
 # ---------------------------------------------------------------------------
-# Module-level singleton (trained once on import)
+# Module-level cache (trained once per unique config entry)
 # ---------------------------------------------------------------------------
 
-_nsa_instance: Optional[NegativeSelectionAlgorithm] = None
+# Preset NSA parameters
+NSA_DEFAULT_DETECTOR_COUNT: int = 200
+NSA_DEFAULT_DETECTOR_RADIUS: float = 0.40
+NSA_DEFAULT_SELF_MATCH_THRESHOLD: float = 0.75
+
+# Cache: (detector_count, detector_radius, self_match_threshold) -> instance
+_nsa_cache: dict[tuple, NegativeSelectionAlgorithm] = {}
 
 
-def get_nsa() -> NegativeSelectionAlgorithm:
-    
-    global _nsa_instance
-    if _nsa_instance is None:
-        # Load normal corpus from database
+def get_nsa(
+    detector_count: int = NSA_DEFAULT_DETECTOR_COUNT,
+    detector_radius: float = NSA_DEFAULT_DETECTOR_RADIUS,
+    self_match_threshold: float = NSA_DEFAULT_SELF_MATCH_THRESHOLD,
+) -> NegativeSelectionAlgorithm:
+    """
+    Return a trained NSA instance for the given parameters.
+    Instances are cached by (detector_count, detector_radius, self_match_threshold)
+    so a re-train is only triggered when the config actually changes.
+    """
+    cache_key = (
+        detector_count,
+        round(detector_radius, 4),
+        round(self_match_threshold, 4),
+    )
+
+    if cache_key not in _nsa_cache:
         normal_corpus = load_normal_corpus_from_db()
 
-        _nsa_instance = NegativeSelectionAlgorithm(
-            detector_count=200,
-            detector_radius=0.40,
-            self_match_threshold=0.75,
+        instance = NegativeSelectionAlgorithm(
+            detector_count=detector_count,
+            detector_radius=detector_radius,
+            self_match_threshold=self_match_threshold,
             max_attempts=10000,
             random_seed=42,
         )
-        _nsa_instance.train(normal_corpus)
-    return _nsa_instance
+        instance.train(normal_corpus)
+        _nsa_cache[cache_key] = instance
+
+    return _nsa_cache[cache_key]
