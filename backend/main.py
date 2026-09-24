@@ -1,5 +1,6 @@
 import hashlib
-import json as _json
+import json
+import logging
 from fastapi import (
     APIRouter,
     Depends,
@@ -13,8 +14,7 @@ from fastapi import (
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
-from typing import List, Literal, Optional
-from auth import reset_user_password
+from typing import Literal
 from nsa import (
     get_nsa,
     NSAResult,
@@ -28,6 +28,7 @@ from auth import (
     create_user,
     decode_access_token,
     get_user_by_id,
+    reset_user_password,
 )
 from database import init_db, get_cursor
 from sentiment import classify_sentiment
@@ -43,9 +44,7 @@ from dataset_handler import (
 )
 
 
-# ---------------------------------------------------------------------------
-# Cache helpers
-# ---------------------------------------------------------------------------
+logger = logging.getLogger(__name__)
 
 
 def _feedback_hash(feedback: list[str]) -> str:
@@ -92,7 +91,6 @@ def _load_cached_session(user_id: int, input_hash: str) -> dict | None:
 
 def _save_session(user_id: int, input_hash: str, response: "AnalyseResponse") -> None:
     with get_cursor(commit=True) as cur:
-        # Upsert the session summary
         cur.execute(
             """
             INSERT INTO nsa_sessions (user_id, input_hash, total_records, valid_records, suspicious_records)
@@ -115,7 +113,6 @@ def _save_session(user_id: int, input_hash: str, response: "AnalyseResponse") ->
         )
         session_id = cur.fetchone()["session_id"]
 
-        # Delete old per-record rows and re-insert fresh ones
         cur.execute(
             "DELETE FROM nsa_session_results WHERE session_id = %s", (session_id,)
         )
@@ -132,7 +129,7 @@ def _save_session(user_id: int, input_hash: str, response: "AnalyseResponse") ->
                     item.id,
                     item.originalText,
                     item.cleanedText,
-                    _json.dumps(item.tokens),
+                    json.dumps(item.tokens),
                     item.nsaStatus,
                     item.anomalyScore,
                     item.anomalyReason,
@@ -140,13 +137,7 @@ def _save_session(user_id: int, input_hash: str, response: "AnalyseResponse") ->
             )
 
 
-# ---------------------------------------------------------------------------
-# NSA config helpers
-# ---------------------------------------------------------------------------
-
-
-def _get_user_nsa_config(user_id: int) -> dict:
-    """Return the user's saved NSA config, falling back to defaults."""
+def _load_nsa_config(user_id: int) -> dict:
     with get_cursor() as cur:
         cur.execute(
             """
@@ -177,8 +168,7 @@ def _get_user_nsa_config(user_id: int) -> dict:
     }
 
 
-def _upsert_user_nsa_config(user_id: int, config: dict) -> None:
-    """Persist the user's NSA config into integration_settings."""
+def _save_nsa_config(user_id: int, config: dict) -> None:
     with get_cursor(commit=True) as cur:
         cur.execute(
             """
@@ -198,10 +188,6 @@ def _upsert_user_nsa_config(user_id: int, config: dict) -> None:
             ),
         )
 
-
-# ---------------------------------------------------------------------------
-# App setup
-# ---------------------------------------------------------------------------
 
 app = FastAPI(
     title="EventSense AI",
@@ -229,7 +215,7 @@ sentiment_router = APIRouter(
 
 
 @app.on_event("startup")
-def on_startup():
+def on_startup() -> None:
     init_db()
 
 
@@ -239,7 +225,7 @@ app.add_middleware(
         "http://localhost:5173",
         "http://127.0.0.1:5173",
         "http://localhost:3000",
-        "http://localhost:3001",  # for the live test
+        "http://localhost:3001",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -247,11 +233,6 @@ app.add_middleware(
 )
 
 bearer_scheme = HTTPBearer()
-
-
-# ---------------------------------------------------------------------------
-# Auth dependency
-# ---------------------------------------------------------------------------
 
 
 def get_current_user(
@@ -265,11 +246,6 @@ def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
     return payload
-
-
-# ---------------------------------------------------------------------------
-# Auth schemas
-# ---------------------------------------------------------------------------
 
 
 class RegisterRequest(BaseModel):
@@ -301,38 +277,32 @@ class ResetPasswordRequest(BaseModel):
     newPassword: str
 
 
-# -----------------------------------------------------------------------------------
-# NSA schemas
-# -----------------------------------------------------------------------------------
-
-
 class NsaConfigResponse(BaseModel):
     detectorCount: int
     detectorRadius: float
     selfMatchThreshold: float
-    apiUrl: Optional[str]
+    apiUrl: str | None
 
 
 class NsaConfigRequest(BaseModel):
-    detectorCount: Optional[int] = None
-    detectorRadius: Optional[float] = None
-    selfMatchThreshold: Optional[float] = None
-    apiUrl: Optional[str] = None
+    detectorCount: int | None = None
+    detectorRadius: float | None = None
+    selfMatchThreshold: float | None = None
+    apiUrl: str | None = None
 
 
 class AnalyseRequest(BaseModel):
-    feedback: List[str]
-    # Optional per-run config overrides; if omitted, user's saved config is used
-    detectorCount: Optional[int] = None
-    detectorRadius: Optional[float] = None
-    selfMatchThreshold: Optional[float] = None
+    feedback: list[str]
+    detectorCount: int | None = None
+    detectorRadius: float | None = None
+    selfMatchThreshold: float | None = None
 
 
 class ResultItem(BaseModel):
     id: int
     originalText: str
     cleanedText: str
-    tokens: List[str]
+    tokens: list[str]
     nsaStatus: str
     anomalyScore: int
     anomalyReason: str
@@ -342,61 +312,53 @@ class AnalyseResponse(BaseModel):
     totalRecords: int
     validRecords: int
     suspiciousRecords: int
-    results: List[ResultItem]
+    results: list[ResultItem]
     cached: bool = False
 
 
-# ---------------------------------------------------------------------------
-# Datasets schemas
-# ---------------------------------------------------------------------------
 class DatasetInfo(BaseModel):
     id: int
     name: str
     type: str
-    description: Optional[str]
+    description: str | None
     totalRecords: int
     status: str
-    uploadedAt: Optional[str]
+    uploadedAt: str | None
 
 
 class DatasetListResponse(BaseModel):
     total: int
-    datasets: List[DatasetInfo]
+    datasets: list[DatasetInfo]
 
 
 class DatasetDetailResponse(BaseModel):
     id: int
     name: str
     type: str
-    description: Optional[str]
+    description: str | None
     totalRecords: int
     status: str
-    uploadedBy: Optional[str]
-    uploadedAt: Optional[str]
+    uploadedBy: str | None
+    uploadedAt: str | None
 
 
 class FeedbackRecord(BaseModel):
     id: int
     text: str
-    cleanedText: Optional[str]
+    cleanedText: str | None
     isValid: bool
     isAnomalous: bool
-    createdAt: Optional[str]
+    createdAt: str | None
 
 
 class DatasetFeedbackResponse(BaseModel):
     datasetId: int
     total: int
-    records: List[FeedbackRecord]
-
-
-# -------------------------------------------------------------------------------------------------
-# Sentiment schemas
-# -------------------------------------------------------------------------------------------------
+    records: list[FeedbackRecord]
 
 
 class SentimentRequest(BaseModel):
-    texts: List[str]
+    texts: list[str]
 
 
 class SentimentItem(BaseModel):
@@ -412,15 +374,10 @@ class SentimentResponse(BaseModel):
     positiveCount: int
     negativeCount: int
     neutralCount: int
-    results: List[SentimentItem]
+    results: list[SentimentItem]
 
 
-# -----------------------------------------------------------------------------
-# Helpers
-# -----------------------------------------------------------------------------
-
-
-def _nsa_result_to_item(r: NSAResult) -> ResultItem:
+def _to_result_item(r: NSAResult) -> ResultItem:
     return ResultItem(
         id=r.id,
         originalText=r.original_text,
@@ -432,19 +389,9 @@ def _nsa_result_to_item(r: NSAResult) -> ResultItem:
     )
 
 
-# -------------------------------------------------------------------------------
-# Routes — health
-# ---------------------------------------------------------------------------------
-
-
 @app.get("/")
-def health_check():
+def health_check() -> dict[str, str]:
     return {"status": "ok", "service": "EventSense AI"}
-
-
-# ----------------------------------------------------------------------------------
-# Routes — auth
-# ------------------------------------------------------------------------------
 
 
 @auth_router.post("/register", response_model=AuthResponse, status_code=201)
@@ -531,18 +478,12 @@ def reset_password(body: ResetPasswordRequest):
     }
 
 
-# -------------------------------------------------------------------------------------
-# Routes — NSA analysis (protected)
-# ------------------------------------------------------------------------------------
-
-
 @nsa_router.get("/latest-valid")
 def get_latest_valid_records(current_user: dict = Depends(get_current_user)):
 
     user_id = current_user["sub"]
 
     with get_cursor() as cur:
-        # Get the most recent session for this user
         cur.execute(
             """
             SELECT session_id, created_at, total_records, valid_records, suspicious_records
@@ -558,7 +499,6 @@ def get_latest_valid_records(current_user: dict = Depends(get_current_user)):
         if not session:
             return {"found": False, "records": [], "sessionInfo": None}
 
-        # Fetch only the Valid records from that session
         cur.execute(
             """
             SELECT record_index, original_text, nsa_status
@@ -588,8 +528,7 @@ def get_latest_valid_records(current_user: dict = Depends(get_current_user)):
 
 @nsa_router.get("/config", response_model=NsaConfigResponse)
 def get_nsa_config(current_user: dict = Depends(get_current_user)):
-    """Return the calling user's saved NSA configuration."""
-    return _get_user_nsa_config(current_user["sub"])
+    return _load_nsa_config(current_user["sub"])
 
 
 @nsa_router.put("/config", response_model=NsaConfigResponse)
@@ -597,10 +536,8 @@ def update_nsa_config(
     body: NsaConfigRequest,
     current_user: dict = Depends(get_current_user),
 ):
-    """Persist the user's NSA configuration overrides."""
     user_id = current_user["sub"]
 
-    # Validate ranges before storing
     if body.detectorCount is not None and not (1 <= body.detectorCount <= 2000):
         raise HTTPException(
             status_code=422, detail="detectorCount must be between 1 and 2000."
@@ -616,7 +553,7 @@ def update_nsa_config(
             status_code=422, detail="selfMatchThreshold must be between 0.01 and 1.0."
         )
 
-    current = _get_user_nsa_config(user_id)
+    current = _load_nsa_config(user_id)
     merged = {
         "detectorCount": (
             body.detectorCount
@@ -635,7 +572,7 @@ def update_nsa_config(
         ),
         "apiUrl": body.apiUrl if body.apiUrl is not None else current["apiUrl"],
     }
-    _upsert_user_nsa_config(user_id, merged)
+    _save_nsa_config(user_id, merged)
     return merged
 
 
@@ -651,9 +588,7 @@ def analyse(
 
     user_id = current_user["sub"]
     input_hash = _feedback_hash(feedback)
-
-    # ── Resolve config: per-request overrides > user saved config > defaults ──
-    saved_config = _get_user_nsa_config(user_id)
+    saved_config = _load_nsa_config(user_id)
     detector_count = (
         request.detectorCount
         if request.detectorCount is not None
@@ -669,13 +604,7 @@ def analyse(
         if request.selfMatchThreshold is not None
         else saved_config["selfMatchThreshold"]
     )
-
-    # ── Cache hit ──────────────────────────────────────────────────────────-------- #todo uncomment when figured out how to store
-    """ cached = _load_cached_session(user_id, input_hash) 
-    if cached:
-        return AnalyseResponse(**cached) """
-
-    # ── Cache miss — run NSA ───────────────────────────────────────────────----------
+    # Session reads are disabled until token JSON handling is finalised.
     nsa = get_nsa(
         detector_count=detector_count,
         detector_radius=detector_radius,
@@ -687,22 +616,16 @@ def analyse(
         totalRecords=response_data.total_records,
         validRecords=response_data.valid_records,
         suspiciousRecords=response_data.suspicious_records,
-        results=[_nsa_result_to_item(r) for r in response_data.results],
+        results=[_to_result_item(r) for r in response_data.results],
         cached=False,
     )
 
-    # Save to DB (non-fatal if it fails)
     try:
         _save_session(user_id, input_hash, result)
-    except Exception as exc:
-        print(f"[warn] Could not cache NSA session: {exc}")
+    except Exception:
+        logger.exception("Could not cache NSA session")
 
     return result
-
-
-# ---------------------------------------------------------------------------
-# Routes — Sentiment analysis (protected)
-# ---------------------------------------------------------------------------
 
 
 @sentiment_router.post("/analyse", response_model=SentimentResponse)
@@ -736,21 +659,15 @@ def sentiment_analyse(
     )
 
 
-# -------------------------------------------------------------------------------------
-# Routes — Dataset management (protected)
-# --------------------------------------------------------------------------------------
-
-
 @datasets_router.post("/upload", status_code=201)
 async def upload_dataset(
     file: UploadFile = File(...),
-    name: Optional[str] = Form(None),
-    description: Optional[str] = Form(None),
+    name: str | None = Form(None),
+    description: str | None = Form(None),
     current_user: dict = Depends(get_current_user),
 ):
     user_id = current_user["sub"]
 
-    # Validate file type
     if not file.filename:
         raise HTTPException(status_code=400, detail="No file provided")
 
@@ -766,37 +683,31 @@ async def upload_dataset(
             detail="Unsupported file type. Please upload a CSV or JSON file.",
         )
 
-    # Read file content
     try:
         content = await file.read()
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to read file: {str(e)}")
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Failed to read file: {str(exc)}")
 
-    # Validate file size (max 10MB)
     if len(content) > 10 * 1024 * 1024:
         raise HTTPException(
             status_code=413, detail="File too large. Maximum size is 10MB."
         )
 
-    # Parse the file
     try:
         if source_type == "CSV":
             feedback_texts = parse_csv_file(content)
-        else:  # JSON
+        else:
             feedback_texts = parse_json_file(content)
     except DatasetParseError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+        raise HTTPException(status_code=422, detail=str(exc))
 
-    # Validate we have feedback
     if not feedback_texts:
         raise HTTPException(
             status_code=422, detail="No valid feedback records found in file"
         )
 
-    # Use provided name or default to filename
     dataset_name = name or file.filename
 
-    # Save to database
     try:
         dataset_id = save_dataset_to_db(
             user_id=user_id,
@@ -806,8 +717,10 @@ async def upload_dataset(
             file_path=file.filename,
             description=description,
         )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to save dataset: {str(e)}")
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to save dataset: {str(exc)}"
+        )
 
     return {
         "message": "Dataset uploaded successfully",
@@ -828,9 +741,9 @@ def list_datasets(
 
     try:
         datasets = get_user_datasets(user_id, limit, offset)
-    except Exception as e:
+    except Exception as exc:
         raise HTTPException(
-            status_code=500, detail=f"Failed to retrieve datasets: {str(e)}"
+            status_code=500, detail=f"Failed to retrieve datasets: {str(exc)}"
         )
 
     return DatasetListResponse(
@@ -847,9 +760,9 @@ def get_dataset(
 
     try:
         dataset = get_dataset_by_id(dataset_id, user_id)
-    except Exception as e:
+    except Exception as exc:
         raise HTTPException(
-            status_code=500, detail=f"Failed to retrieve dataset: {str(e)}"
+            status_code=500, detail=f"Failed to retrieve dataset: {str(exc)}"
         )
 
     if not dataset:
@@ -870,12 +783,11 @@ def get_dataset_feedback_records(
 ):
     user_id = current_user["sub"]
 
-    # Verify user owns this dataset
     try:
         dataset = get_dataset_by_id(dataset_id, user_id)
-    except Exception as e:
+    except Exception as exc:
         raise HTTPException(
-            status_code=500, detail=f"Failed to verify dataset: {str(e)}"
+            status_code=500, detail=f"Failed to verify dataset: {str(exc)}"
         )
 
     if not dataset:
@@ -884,12 +796,11 @@ def get_dataset_feedback_records(
             detail="Dataset not found or you don't have permission to view it",
         )
 
-    # Get feedback records
     try:
         records = get_dataset_feedback(dataset_id, limit, offset)
-    except Exception as e:
+    except Exception as exc:
         raise HTTPException(
-            status_code=500, detail=f"Failed to retrieve feedback records: {str(e)}"
+            status_code=500, detail=f"Failed to retrieve feedback records: {str(exc)}"
         )
 
     return DatasetFeedbackResponse(
@@ -908,9 +819,9 @@ def delete_dataset_endpoint(
 
     try:
         success = delete_dataset(dataset_id, user_id)
-    except Exception as e:
+    except Exception as exc:
         raise HTTPException(
-            status_code=500, detail=f"Failed to delete dataset: {str(e)}"
+            status_code=500, detail=f"Failed to delete dataset: {str(exc)}"
         )
 
     if not success:
@@ -921,10 +832,6 @@ def delete_dataset_endpoint(
 
     return {"message": "Dataset deleted successfully", "datasetId": dataset_id}
 
-
-# ---------------------------------------------------------------------------
-# Routes — Dashboard summary (protected)
-# ---------------------------------------------------------------------------
 
 dashboard_router = APIRouter(
     prefix="/api/dashboard",
@@ -937,7 +844,6 @@ def dashboard_summary(current_user: dict = Depends(get_current_user)):
     user_id = current_user["sub"]
 
     with get_cursor() as cur:
-        # ── Dataset stats ──────────────────────────────────────────────────
         cur.execute(
             """
             SELECT
@@ -952,8 +858,6 @@ def dashboard_summary(current_user: dict = Depends(get_current_user)):
 
         dataset_count = int(ds["dataset_count"])
         total_feedback = int(ds["total_feedback"])
-
-        # ── Latest NSA session ─────────────────────────────────────────────
         cur.execute(
             """
             SELECT total_records, valid_records, suspicious_records, created_at
@@ -971,15 +875,11 @@ def dashboard_summary(current_user: dict = Depends(get_current_user)):
         nsa_suspicious = int(nsa["suspicious_records"]) if nsa else 0
         nsa_pass_rate = round((nsa_valid / nsa_total) * 100) if nsa_total else 0
         nsa_run_at = nsa["created_at"].isoformat() if nsa else None
-
-        # ── Total NSA scans ever run ───────────────────────────────────────
         cur.execute(
             "SELECT COUNT(*) AS cnt FROM nsa_sessions WHERE user_id = %s",
             (user_id,),
         )
         nsa_session_count = int(cur.fetchone()["cnt"])
-
-        # ── Sentiment results count ────────────────────────────────────────
         cur.execute(
             """
             SELECT COUNT(*) AS cnt
@@ -991,8 +891,6 @@ def dashboard_summary(current_user: dict = Depends(get_current_user)):
             (user_id,),
         )
         sentiment_count = int(cur.fetchone()["cnt"])
-
-        # ── Activity feed — real events from DB ────────────────────────────
         # Pull the 8 most recent significant events for this user.
         cur.execute(
             """
@@ -1073,10 +971,6 @@ def dashboard_summary(current_user: dict = Depends(get_current_user)):
         "activity": activity,
     }
 
-
-# ---------------------------------------------------------------------------
-# Register routers
-# ---------------------------------------------------------------------------
 
 app.include_router(auth_router)
 app.include_router(datasets_router)

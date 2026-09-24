@@ -1,34 +1,37 @@
 from __future__ import annotations
 
+import logging
 import os
 from contextlib import contextmanager
-from typing import Generator
+from collections.abc import Iterator
 
 import psycopg2
-import psycopg2.extras
+from psycopg2.extensions import connection
+from psycopg2.extras import RealDictCursor
 
 
-DATABASE_URL: str = os.getenv(
+logger = logging.getLogger(__name__)
+
+DATABASE_URL = os.getenv(
     "DATABASE_URL",
     "postgresql://eventsense_admin:StrongPassword123@localhost:5432/eventsense_ai",
 )
 
 
-def get_connection() -> psycopg2.extensions.connection:
-    """Open and return a new PostgreSQL connection."""
+def get_connection() -> connection:
     return psycopg2.connect(DATABASE_URL)
 
 
 @contextmanager
-def get_cursor(
-    commit: bool = False,
-) -> Generator[psycopg2.extras.RealDictCursor, None, None]:
+def get_cursor(commit: bool = False) -> Iterator[RealDictCursor]:
     conn = get_connection()
+
     try:
-        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            yield cur
-            if commit:
-                conn.commit()
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            yield cursor
+
+        if commit:
+            conn.commit()
     except Exception:
         conn.rollback()
         raise
@@ -50,7 +53,6 @@ CREATE TABLE IF NOT EXISTS users (
 );
 """
 
-
 CREATE_DATASETS_TABLE = """
 CREATE TABLE IF NOT EXISTS datasets (
     dataset_id SERIAL PRIMARY KEY,
@@ -67,7 +69,6 @@ CREATE TABLE IF NOT EXISTS datasets (
 );
 """
 
-
 CREATE_FEEDBACK_RECORDS_TABLE = """
 CREATE TABLE IF NOT EXISTS feedback_records (
     feedback_id SERIAL PRIMARY KEY,
@@ -83,7 +84,6 @@ CREATE TABLE IF NOT EXISTS feedback_records (
 );
 """
 
-
 CREATE_PREPROCESSING_LOG_TABLE = """
 CREATE TABLE IF NOT EXISTS preprocessing_log (
     preprocessing_id SERIAL PRIMARY KEY,
@@ -97,7 +97,6 @@ CREATE TABLE IF NOT EXISTS preprocessing_log (
 );
 """
 
-
 CREATE_NSA_DETECTORS_TABLE = """
 CREATE TABLE IF NOT EXISTS nsa_detectors (
     detector_id SERIAL PRIMARY KEY,
@@ -109,7 +108,6 @@ CREATE TABLE IF NOT EXISTS nsa_detectors (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 """
-
 
 CREATE_ANOMALY_RESULTS_TABLE = """
 CREATE TABLE IF NOT EXISTS anomaly_results (
@@ -124,7 +122,6 @@ CREATE TABLE IF NOT EXISTS anomaly_results (
 );
 """
 
-
 CREATE_SENTIMENT_RESULTS_TABLE = """
 CREATE TABLE IF NOT EXISTS sentiment_results (
     sentiment_id SERIAL PRIMARY KEY,
@@ -138,7 +135,6 @@ CREATE TABLE IF NOT EXISTS sentiment_results (
     classified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 """
-
 
 CREATE_REPORTS_TABLE = """
 CREATE TABLE IF NOT EXISTS reports (
@@ -157,7 +153,6 @@ CREATE TABLE IF NOT EXISTS reports (
 );
 """
 
-
 CREATE_SYSTEM_CONFIGURATION_TABLE = """
 CREATE TABLE IF NOT EXISTS system_configuration (
     config_id SERIAL PRIMARY KEY,
@@ -168,7 +163,6 @@ CREATE TABLE IF NOT EXISTS system_configuration (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 """
-
 
 CREATE_EXPERIMENT_RUNS_TABLE = """
 CREATE TABLE IF NOT EXISTS experiment_runs (
@@ -187,6 +181,82 @@ CREATE TABLE IF NOT EXISTS experiment_runs (
 );
 """
 
+CREATE_NSA_SESSIONS_TABLE = """
+CREATE TABLE IF NOT EXISTS nsa_sessions (
+    session_id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(user_id),
+    input_hash TEXT NOT NULL,
+    total_records INTEGER NOT NULL,
+    valid_records INTEGER NOT NULL,
+    suspicious_records INTEGER NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_nsa_sessions_user_hash
+ON nsa_sessions(user_id, input_hash);
+"""
+
+CREATE_NSA_SESSION_RESULTS_TABLE = """
+CREATE TABLE IF NOT EXISTS nsa_session_results (
+    result_id SERIAL PRIMARY KEY,
+    session_id INTEGER REFERENCES nsa_sessions(session_id) ON DELETE CASCADE,
+    record_index INTEGER NOT NULL,
+    original_text TEXT NOT NULL,
+    cleaned_text TEXT NOT NULL,
+    tokens JSONB NOT NULL,
+    nsa_status TEXT NOT NULL,
+    anomaly_score INTEGER NOT NULL,
+    anomaly_reason TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_nsa_session_results_session
+ON nsa_session_results(session_id);
+"""
+
+CREATE_INTEGRATION_SETTINGS_TABLE = """
+CREATE TABLE IF NOT EXISTS integration_settings (
+    setting_id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(user_id) ON DELETE CASCADE,
+
+    ext_api_url TEXT,
+    ext_api_token TEXT,
+    ext_data_path TEXT,
+    ext_text_field VARCHAR(100) DEFAULT 'text',
+    ext_id_field VARCHAR(100) DEFAULT 'id',
+
+    webhook_url TEXT,
+    webhook_secret TEXT,
+    webhook_enabled BOOLEAN DEFAULT FALSE,
+
+    nsa_threshold NUMERIC(10,4),
+    nsa_detector_count INTEGER,
+    nsa_api_url TEXT,
+
+    api_key TEXT UNIQUE,
+    api_key_label VARCHAR(255),
+    api_key_created_at TIMESTAMP,
+
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id)
+);
+"""
+
+CREATE_OTP_TABLE = """
+CREATE TABLE IF NOT EXISTS otp_codes (
+    otp_id SERIAL PRIMARY KEY,
+    email TEXT NOT NULL,
+    code TEXT NOT NULL,
+    purpose TEXT NOT NULL CHECK (
+        purpose IN ('verify_email', 'reset_password')
+    ),
+    used BOOLEAN NOT NULL DEFAULT FALSE,
+    expires_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_otp_email_purpose
+ON otp_codes(email, purpose);
+"""
 
 CREATE_INDEXES = """
 CREATE INDEX IF NOT EXISTS idx_feedback_dataset
@@ -205,122 +275,46 @@ CREATE INDEX IF NOT EXISTS idx_report_dataset
 ON reports(dataset_id);
 """
 
-# ---------------------------------------------------------------------------
-# NSA analysis session caching
-# ---------------------------------------------------------------------------
-
-CREATE_NSA_SESSIONS_TABLE = """
-CREATE TABLE IF NOT EXISTS nsa_sessions (
-    session_id   SERIAL PRIMARY KEY,
-    user_id      INTEGER REFERENCES users(user_id),
-    input_hash   TEXT NOT NULL,
-    total_records     INTEGER NOT NULL,
-    valid_records     INTEGER NOT NULL,
-    suspicious_records INTEGER NOT NULL,
-    created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_nsa_sessions_user_hash
-ON nsa_sessions(user_id, input_hash);
-"""
-
-CREATE_NSA_SESSION_RESULTS_TABLE = """
-CREATE TABLE IF NOT EXISTS nsa_session_results (
-    result_id      SERIAL PRIMARY KEY,
-    session_id     INTEGER REFERENCES nsa_sessions(session_id) ON DELETE CASCADE,
-    record_index   INTEGER NOT NULL,
-    original_text  TEXT NOT NULL,
-    cleaned_text   TEXT NOT NULL,
-    tokens         JSONB NOT NULL,
-    nsa_status     TEXT NOT NULL,
-    anomaly_score  INTEGER NOT NULL,
-    anomaly_reason TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_nsa_session_results_session
-ON nsa_session_results(session_id);
-"""
-
-CREATE_INTEGRATION_SETTINGS_TABLE = """
-CREATE TABLE IF NOT EXISTS integration_settings (
-    setting_id      SERIAL PRIMARY KEY,
-    user_id         INTEGER REFERENCES users(user_id) ON DELETE CASCADE,
-
-    -- External data source
-    ext_api_url     TEXT,
-    ext_api_token   TEXT,
-    ext_data_path   TEXT,
-    ext_text_field  VARCHAR(100) DEFAULT 'text',
-    ext_id_field    VARCHAR(100) DEFAULT 'id',
-
-    -- Webhook / push results back
-    webhook_url     TEXT,
-    webhook_secret  TEXT,
-    webhook_enabled BOOLEAN DEFAULT FALSE,
-
-    -- NSA engine overrides (per-user; falls back to system_configuration)
-    nsa_threshold   NUMERIC(10,4),
-    nsa_detector_count INTEGER,
-    nsa_api_url     TEXT,
-
-    -- API key for external systems calling EventSense
-    api_key         TEXT UNIQUE,
-    api_key_label   VARCHAR(255),
-    api_key_created_at TIMESTAMP,
-
-    updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(user_id)
-);
-"""
-
-CREATE_OTP_TABLE = """
-CREATE TABLE IF NOT EXISTS otp_codes (
-    otp_id      SERIAL PRIMARY KEY,
-    email       TEXT NOT NULL,
-    code        TEXT NOT NULL,
-    purpose     TEXT NOT NULL CHECK (purpose IN ('verify_email', 'reset_password')),
-    used        BOOLEAN NOT NULL DEFAULT FALSE,
-    expires_at  TIMESTAMP NOT NULL,
-    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-CREATE INDEX IF NOT EXISTS idx_otp_email_purpose
-ON otp_codes(email, purpose);
-"""
-
-
 MIGRATE_NSA_API_URL = """
 DO $$
 BEGIN
     IF NOT EXISTS (
-        SELECT 1 FROM information_schema.columns
-        WHERE table_name='integration_settings' AND column_name='nsa_api_url'
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'integration_settings'
+          AND column_name = 'nsa_api_url'
     ) THEN
-        ALTER TABLE integration_settings ADD COLUMN nsa_api_url TEXT;
+        ALTER TABLE integration_settings
+        ADD COLUMN nsa_api_url TEXT;
     END IF;
-END$$;
+END
+$$;
 """
 
 
+SCHEMA_STATEMENTS = (
+    CREATE_USERS_TABLE,
+    CREATE_DATASETS_TABLE,
+    CREATE_FEEDBACK_RECORDS_TABLE,
+    CREATE_PREPROCESSING_LOG_TABLE,
+    CREATE_NSA_DETECTORS_TABLE,
+    CREATE_ANOMALY_RESULTS_TABLE,
+    CREATE_SENTIMENT_RESULTS_TABLE,
+    CREATE_REPORTS_TABLE,
+    CREATE_SYSTEM_CONFIGURATION_TABLE,
+    CREATE_EXPERIMENT_RUNS_TABLE,
+    CREATE_NSA_SESSIONS_TABLE,
+    CREATE_NSA_SESSION_RESULTS_TABLE,
+    CREATE_INTEGRATION_SETTINGS_TABLE,
+    CREATE_OTP_TABLE,
+    CREATE_INDEXES,
+    MIGRATE_NSA_API_URL,
+)
+
+
 def init_db() -> None:
-    statements = [
-        CREATE_USERS_TABLE,
-        CREATE_DATASETS_TABLE,
-        CREATE_FEEDBACK_RECORDS_TABLE,
-        CREATE_PREPROCESSING_LOG_TABLE,
-        CREATE_NSA_DETECTORS_TABLE,
-        CREATE_ANOMALY_RESULTS_TABLE,
-        CREATE_SENTIMENT_RESULTS_TABLE,
-        CREATE_REPORTS_TABLE,
-        CREATE_SYSTEM_CONFIGURATION_TABLE,
-        CREATE_EXPERIMENT_RUNS_TABLE,
-        CREATE_INDEXES,
-        CREATE_NSA_SESSIONS_TABLE,
-        CREATE_NSA_SESSION_RESULTS_TABLE,
-        CREATE_OTP_TABLE,
-        CREATE_INTEGRATION_SETTINGS_TABLE,
-        MIGRATE_NSA_API_URL,
-    ]
+    with get_cursor(commit=True) as cursor:
+        for statement in SCHEMA_STATEMENTS:
+            cursor.execute(statement)
 
-    with get_cursor(commit=True) as cur:
-        for statement in statements:
-            cur.execute(statement)
-
-    print("[db] EventSense AI schema initialised.")
+    logger.info("EventSense AI database schema initialised.")

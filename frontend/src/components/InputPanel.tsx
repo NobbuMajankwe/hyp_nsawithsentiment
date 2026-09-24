@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Alert,
   Box,
@@ -23,6 +23,7 @@ import {
   Link,
   CloudDownload,
 } from "lucide-react";
+//import { useAuth } from "../context/AuthContext";
 
 interface Props {
   value: string;
@@ -30,6 +31,7 @@ interface Props {
   onRun: () => void;
   onReset: () => void;
   loading: boolean;
+  url?: string;
 }
 
 
@@ -366,9 +368,11 @@ export function InputPanel({
   onRun,
   onReset,
   loading,
+  url
 }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  //const { token } = useAuth();
   const [inputMethod, setInputMethod] = useState<InputMethod>("api");
   const [apiUrl, setApiUrl] = useState("");
   const [sourceName, setSourceName] = useState<string | null>(null);
@@ -376,6 +380,13 @@ export function InputPanel({
   const [sourceLoading, setSourceLoading] = useState(false);
   const [inputError, setInputError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if(url){
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setApiUrl(url);
+    }
+  }, [url])
+  
   const recordCount = value
     .split("\n")
     .map((line) => line.trim())

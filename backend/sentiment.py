@@ -21,43 +21,21 @@ from transformers import (
 
 logger = logging.getLogger(__name__)
 
+HF_API_TOKEN = os.getenv("HF_API_TOKEN", "")
+HF_MODEL_ID = "distilbert-base-uncased-finetuned-sst-2-english"
+HF_API_URL = f"https://api-inference.huggingface.co/models/{HF_MODEL_ID}"
 
-# ---------------------------------------------------------------------------
-# Configuration
-# ---------------------------------------------------------------------------
-
-HF_API_TOKEN: str = os.getenv("HF_API_TOKEN", "")
-
-HF_MODEL_ID: str = "distilbert-base-uncased-finetuned-sst-2-english"
-
-HF_API_URL: str = f"https://api-inference.huggingface.co/models/{HF_MODEL_ID}"
-
-# Maximum texts sent in one API or PyTorch batch.
 BATCH_SIZE = int(os.getenv("SENTIMENT_BATCH_SIZE", "16"))
-
-# Maximum number of model tokens.
 MAX_TOKEN_LENGTH = 512
-
-# Scores below this threshold are treated as Neutral.
 NEUTRAL_THRESHOLD = float(os.getenv("SENTIMENT_NEUTRAL_THRESHOLD", "0.65"))
-
-# Hugging Face API request timeout.
 HF_API_TIMEOUT = 30
-
-# Delay between API requests to reduce free-tier rate-limit problems.
 HF_REQUEST_DELAY = 0.3
-
 
 if BATCH_SIZE < 1:
     raise ValueError("SENTIMENT_BATCH_SIZE must be at least 1.")
 
 if not 0.5 <= NEUTRAL_THRESHOLD <= 1.0:
     raise ValueError("SENTIMENT_NEUTRAL_THRESHOLD must be between 0.5 and 1.0.")
-
-
-# ---------------------------------------------------------------------------
-# Result model
-# ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
@@ -68,19 +46,7 @@ class SentimentResult:
     model: str
 
 
-# ---------------------------------------------------------------------------
-# PyTorch device configuration
-# ---------------------------------------------------------------------------
-
-
 def _get_device() -> torch.device:
-    """
-    Select the best available device for local PyTorch inference.
-
-    CUDA is selected for supported NVIDIA GPUs.
-    MPS is selected for supported Apple Silicon devices.
-    CPU is used as the fallback.
-    """
     if torch.cuda.is_available():
         return torch.device("cuda")
 
@@ -91,29 +57,13 @@ def _get_device() -> torch.device:
 
 
 DEVICE = _get_device()
-
-
-# ---------------------------------------------------------------------------
-# Local model storage and lazy loading
-# ---------------------------------------------------------------------------
-
 _tokenizer: Optional[PreTrainedTokenizerBase] = None
 _model: Optional[PreTrainedModel] = None
-
 _model_lock = threading.Lock()
 
 
-def _load_local_model() -> tuple[
-    PreTrainedTokenizerBase,
-    PreTrainedModel,
-]:
-    """
-    Load the DistilBERT tokenizer and model for local PyTorch inference.
-
-    The resources are loaded only once and are reused for later requests.
-    A lock prevents multiple simultaneous requests from loading the model
-    more than once.
-    """
+def _load_local_model() -> tuple[PreTrainedTokenizerBase, PreTrainedModel]:
+    """Load and cache the local tokenizer and model."""
     global _tokenizer, _model
 
     if _tokenizer is not None and _model is not None:
@@ -121,203 +71,106 @@ def _load_local_model() -> tuple[
 
     with _model_lock:
         if _tokenizer is None:
-            logger.info(
-                "Loading local sentiment tokenizer: %s",
-                HF_MODEL_ID,
-            )
-
+            logger.info("Loading sentiment tokenizer (%s)", HF_MODEL_ID)
             _tokenizer = AutoTokenizer.from_pretrained(HF_MODEL_ID)
 
         if _model is None:
-            logger.info(
-                "Loading local sentiment model on device: %s",
-                DEVICE,
-            )
-
+            logger.info("Loading sentiment model on %s", DEVICE)
             _model = AutoModelForSequenceClassification.from_pretrained(HF_MODEL_ID)
-
             _model.to(DEVICE)
             _model.eval()
 
     return _tokenizer, _model
 
 
-# ---------------------------------------------------------------------------
-# Shared label conversion
-# ---------------------------------------------------------------------------
+def _calculate_neutral_confidence(score: float) -> float:
+    """Estimate confidence for the derived Neutral class."""
+    margin = NEUTRAL_THRESHOLD - 0.5
+    if margin <= 0:
+        return 0.0
+
+    confidence = 1 - abs(score - 0.5) / margin
+    confidence = max(0.0, min(confidence, 1.0))
+    return round(confidence * 100, 2)
 
 
-def _sentiment_label_to_standard(
-    model_label: str,
-    score: float,
-) -> tuple[str, float]:
-    """
-    Convert the binary SST-2 output to the application's label format.
-
-    SST-2 predicts only POSITIVE and NEGATIVE. When the strongest class
-    confidence is below NEUTRAL_THRESHOLD, the result is treated as
-    Neutral according to the application's confidence rule.
-    """
-    normalized_label = model_label.upper()
-
+def _standardise_label(model_label: str, score: float) -> tuple[str, float]:
+    """Convert the binary SST-2 result into the application's labels."""
     if score < NEUTRAL_THRESHOLD:
-        neutral_confidence = _calculate_neutral_confidence(score)
-
-        return "Neutral", neutral_confidence
+        return "Neutral", _calculate_neutral_confidence(score)
 
     confidence = round(score * 100, 2)
+    label = model_label.upper()
 
-    if normalized_label == "POSITIVE":
+    if label == "POSITIVE":
         return "Positive", confidence
-
-    if normalized_label == "NEGATIVE":
+    if label == "NEGATIVE":
         return "Negative", confidence
 
     return "Neutral", confidence
 
 
-def _calculate_neutral_confidence(score: float) -> float:
-    """
-    Calculate a derived Neutral confidence.
-
-    A binary confidence close to 0.5 represents uncertainty between
-    Positive and Negative and is therefore treated as stronger evidence
-    for the application's derived Neutral category.
-    """
-    uncertainty_range = NEUTRAL_THRESHOLD - 0.5
-
-    if uncertainty_range <= 0:
-        return 0.0
-
-    distance_from_uncertainty = abs(score - 0.5)
-
-    neutral_score = 1 - distance_from_uncertainty / uncertainty_range
-
-    neutral_score = max(
-        0.0,
-        min(neutral_score, 1.0),
-    )
-
-    return round(neutral_score * 100, 2)
-
-
-# ---------------------------------------------------------------------------
-# Hugging Face Inference API
-# ---------------------------------------------------------------------------
-
-
-def _hf_classify_batch(
-    texts: list[str],
-) -> list[dict[str, str | float]]:
-    """
-    Send a batch of texts to the Hugging Face Inference API.
-
-    Returns one dictionary for every input text:
-
-        {
-            "label": "POSITIVE" | "NEGATIVE",
-            "score": float
-        }
-    """
+def _hf_classify_batch(texts: list[str]) -> list[dict[str, str | float]]:
     payload = json.dumps(
         {
             "inputs": texts,
-            "options": {
-                "wait_for_model": True,
-            },
+            "options": {"wait_for_model": True},
         }
     ).encode("utf-8")
 
-    request = urllib.request.Request(
-        HF_API_URL,
-        data=payload,
-        method="POST",
-    )
+    request = urllib.request.Request(HF_API_URL, data=payload, method="POST")
+    request.add_header("Authorization", f"Bearer {HF_API_TOKEN}")
+    request.add_header("Content-Type", "application/json")
 
-    request.add_header(
-        "Authorization",
-        f"Bearer {HF_API_TOKEN}",
-    )
+    with urllib.request.urlopen(request, timeout=HF_API_TIMEOUT) as response:
+        data = json.loads(response.read().decode("utf-8"))
 
-    request.add_header(
-        "Content-Type",
-        "application/json",
-    )
+    if isinstance(data, dict) and data.get("error"):
+        raise RuntimeError(f"Hugging Face API error: {data['error']}")
 
-    with urllib.request.urlopen(
-        request,
-        timeout=HF_API_TIMEOUT,
-    ) as response:
-        raw_response = json.loads(response.read().decode("utf-8"))
-
-    if isinstance(raw_response, dict):
-        error_message = raw_response.get("error")
-
-        if error_message:
-            raise RuntimeError(f"Hugging Face API error: {error_message}")
-
-    if not isinstance(raw_response, list):
+    if not isinstance(data, list):
         raise RuntimeError("Unexpected response received from Hugging Face API.")
 
     results: list[dict[str, str | float]] = []
 
-    for item in raw_response:
+    for item in data:
         if isinstance(item, list):
             if not item:
                 raise RuntimeError("Hugging Face returned an empty prediction.")
-
-            best_prediction = max(
-                item,
-                key=lambda prediction: float(prediction["score"]),
-            )
-
+            prediction = max(item, key=lambda value: float(value["score"]))
         elif isinstance(item, dict):
-            best_prediction = item
-
+            prediction = item
         else:
             raise RuntimeError("Unexpected Hugging Face prediction format.")
 
         results.append(
             {
-                "label": str(best_prediction["label"]),
-                "score": float(best_prediction["score"]),
+                "label": str(prediction["label"]),
+                "score": float(prediction["score"]),
             }
         )
 
     if len(results) != len(texts):
         raise RuntimeError(
-            "Hugging Face prediction count does not match " "the number of input texts."
+            "Hugging Face prediction count does not match the input count."
         )
 
     return results
 
 
-def _classify_via_hf(
-    texts: list[str],
-) -> list[SentimentResult]:
-    """
-    Classify texts through the Hugging Face Inference API.
-
-    Texts are divided into batches to reduce request size and support
-    the Hugging Face free-tier API.
-    """
-    all_results: list[SentimentResult] = []
+def _classify_via_hf(texts: list[str]) -> list[SentimentResult]:
+    results: list[SentimentResult] = []
 
     for start in range(0, len(texts), BATCH_SIZE):
         batch = texts[start : start + BATCH_SIZE]
+        predictions = _hf_classify_batch(batch)
 
-        raw_predictions = _hf_classify_batch(batch)
-
-        for text, prediction in zip(
-            batch,
-            raw_predictions,
-        ):
-            label, confidence = _sentiment_label_to_standard(
-                model_label=str(prediction["label"]),
-                score=float(prediction["score"]),
+        for text, prediction in zip(batch, predictions):
+            label, confidence = _standardise_label(
+                str(prediction["label"]),
+                float(prediction["score"]),
             )
-
-            all_results.append(
+            results.append(
                 SentimentResult(
                     text=text,
                     label=label,
@@ -329,109 +182,46 @@ def _classify_via_hf(
         if start + BATCH_SIZE < len(texts):
             time.sleep(HF_REQUEST_DELAY)
 
-    if len(all_results) != len(texts):
-        raise RuntimeError(
-            "API classification result count does not " "match the input count."
-        )
-
-    return all_results
+    return results
 
 
-# ---------------------------------------------------------------------------
-# Local PyTorch DistilBERT classification
-# ---------------------------------------------------------------------------
-
-
-def _pytorch_classify_batch(
-    texts: list[str],
-) -> list[tuple[str, float]]:
-    """
-    Classify one batch locally using DistilBERT and PyTorch.
-
-    Returns a list containing:
-
-        [
-            ("POSITIVE", 0.98),
-            ("NEGATIVE", 0.91)
-        ]
-    """
+def _pytorch_classify_batch(texts: list[str]) -> list[tuple[str, float]]:
     tokenizer, model = _load_local_model()
 
-    encoded_inputs = tokenizer(
+    inputs = tokenizer(
         texts,
         padding=True,
         truncation=True,
         max_length=MAX_TOKEN_LENGTH,
         return_tensors="pt",
     )
-
-    encoded_inputs = {key: value.to(DEVICE) for key, value in encoded_inputs.items()}
+    inputs = {key: value.to(DEVICE) for key, value in inputs.items()}
 
     with torch.inference_mode():
-        outputs = model(**encoded_inputs)
-
-        probabilities = torch.softmax(
-            outputs.logits,
-            dim=-1,
-        )
-
-        confidence_scores, predicted_indices = torch.max(
-            probabilities,
-            dim=-1,
-        )
+        logits = model(**inputs).logits
+        probabilities = torch.softmax(logits, dim=-1)
+        scores, indices = torch.max(probabilities, dim=-1)
 
     predictions: list[tuple[str, float]] = []
 
-    predicted_index_values = predicted_indices.detach().cpu().tolist()
-
-    confidence_values = confidence_scores.detach().cpu().tolist()
-
-    for predicted_index, confidence_score in zip(
-        predicted_index_values,
-        confidence_values,
+    for index, score in zip(
+        indices.detach().cpu().tolist(),
+        scores.detach().cpu().tolist(),
     ):
-        model_label = model.config.id2label[predicted_index]
-
-        predictions.append(
-            (
-                str(model_label),
-                float(confidence_score),
-            )
-        )
-
-    if len(predictions) != len(texts):
-        raise RuntimeError(
-            "PyTorch prediction count does not match " "the number of input texts."
-        )
+        predictions.append((str(model.config.id2label[index]), float(score)))
 
     return predictions
 
 
-def _classify_via_pytorch(
-    texts: list[str],
-) -> list[SentimentResult]:
-    """
-    Classify texts locally using PyTorch and DistilBERT.
-    """
-    all_results: list[SentimentResult] = []
+def _classify_via_pytorch(texts: list[str]) -> list[SentimentResult]:
+    results: list[SentimentResult] = []
 
     for start in range(0, len(texts), BATCH_SIZE):
         batch = texts[start : start + BATCH_SIZE]
 
-        predictions = _pytorch_classify_batch(batch)
-
-        for text, prediction in zip(
-            batch,
-            predictions,
-        ):
-            model_label, model_score = prediction
-
-            label, confidence = _sentiment_label_to_standard(
-                model_label=model_label,
-                score=model_score,
-            )
-
-            all_results.append(
+        for text, (model_label, score) in zip(batch, _pytorch_classify_batch(batch)):
+            label, confidence = _standardise_label(model_label, score)
+            results.append(
                 SentimentResult(
                     text=text,
                     label=label,
@@ -440,17 +230,8 @@ def _classify_via_pytorch(
                 )
             )
 
-    if len(all_results) != len(texts):
-        raise RuntimeError(
-            "PyTorch classification result count does not " "match the input count."
-        )
+    return results
 
-    return all_results
-
-
-# ---------------------------------------------------------------------------
-# Lexicon fallback
-# ---------------------------------------------------------------------------
 
 _POSITIVE_WORDS = {
     "well",
@@ -511,107 +292,48 @@ _NEGATIVE_WORDS = {
     "complicated",
 }
 
-_NEGATION_WORDS = {
-    "not",
-    "never",
-    "no",
-    "hardly",
-    "barely",
-    "neither",
-}
+_NEGATION_WORDS = {"not", "never", "no", "hardly", "barely", "neither"}
 
 
 def _normalise_words(text: str) -> list[str]:
-    """
-    Convert text to lowercase alphabetic tokens.
-
-    Punctuation surrounding words is removed so that values such as
-    'excellent!' and 'terrible,' can still match the lexicon.
-    """
-    return re.findall(
-        r"[a-zA-Z']+",
-        text.lower(),
-    )
+    # Remove punctuation so words such as "excellent!" still match.
+    return re.findall(r"[a-zA-Z']+", text.lower())
 
 
-def _lexicon_classify(
-    text: str,
-) -> tuple[str, float]:
-    """
-    Classify a text using a small sentiment lexicon.
-
-    Backup if the Hugging Face API and local PyTorch
-    inference are both unavailable.
-    """
+def _lexicon_classify(text: str) -> tuple[str, float]:
+    positive = 0
+    negative = 0
     words = _normalise_words(text)
 
-    positive_score = 0
-    negative_score = 0
-
     for index, word in enumerate(words):
-        previous_words = words[max(0, index - 3) : index]
-
-        is_negated = any(
-            previous_word in _NEGATION_WORDS for previous_word in previous_words
-        )
+        recent_words = words[max(0, index - 3) : index]
+        is_negated = any(item in _NEGATION_WORDS for item in recent_words)
 
         if word in _POSITIVE_WORDS:
-            if is_negated:
-                negative_score += 1
-            else:
-                positive_score += 1
-
+            negative += 1 if is_negated else 0
+            positive += 0 if is_negated else 1
         elif word in _NEGATIVE_WORDS:
-            if is_negated:
-                positive_score += 1
-            else:
-                negative_score += 1
+            positive += 1 if is_negated else 0
+            negative += 0 if is_negated else 1
 
-    total = positive_score + negative_score
-
+    total = positive + negative
     if total == 0:
         return "Neutral", 55.0
 
-    if positive_score > negative_score:
-        ratio = positive_score / total
+    if positive > negative:
+        return "Positive", round(min(60 + (positive / total) * 38, 98), 2)
 
-        confidence = min(
-            60 + ratio * 38,
-            98,
-        )
-
-        return (
-            "Positive",
-            round(confidence, 2),
-        )
-
-    if negative_score > positive_score:
-        ratio = negative_score / total
-
-        confidence = min(
-            60 + ratio * 38,
-            98,
-        )
-
-        return (
-            "Negative",
-            round(confidence, 2),
-        )
+    if negative > positive:
+        return "Negative", round(min(60 + (negative / total) * 38, 98), 2)
 
     return "Neutral", 52.0
 
 
-def _classify_via_lexicon(
-    texts: list[str],
-) -> list[SentimentResult]:
-    """
-    Classify multiple texts through the lexicon fallback.
-    """
+def _classify_via_lexicon(texts: list[str]) -> list[SentimentResult]:
     results: list[SentimentResult] = []
 
     for text in texts:
         label, confidence = _lexicon_classify(text)
-
         results.append(
             SentimentResult(
                 text=text,
@@ -624,134 +346,83 @@ def _classify_via_lexicon(
     return results
 
 
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
+def _classify_with_local_fallback(texts: list[str]) -> list[SentimentResult]:
+    try:
+        logger.info("Classifying sentiment locally on %s", DEVICE)
+        return _classify_via_pytorch(texts)
+    except (OSError, RuntimeError, ValueError) as error:
+        logger.exception(
+            "Local PyTorch inference failed; using lexicon fallback: %s",
+            error,
+        )
+        return _classify_via_lexicon(texts)
 
 
-def classify_sentiment(
-    texts: list[str],
-) -> list[SentimentResult]:
-
+def classify_sentiment(texts: list[str]) -> list[SentimentResult]:
     if not isinstance(texts, list):
         raise TypeError("texts must be provided as a list.")
 
-    placeholders: list[Optional[SentimentResult]] = [None] * len(texts)
-
-    non_empty_indices: list[int] = []
-    non_empty_texts: list[str] = []
+    results: list[Optional[SentimentResult]] = [None] * len(texts)
+    valid_indices: list[int] = []
+    valid_texts: list[str] = []
 
     for index, text in enumerate(texts):
         if not isinstance(text, str):
-            placeholders[index] = SentimentResult(
+            results[index] = SentimentResult(
                 text=str(text),
                 label="Neutral",
                 confidence=0.0,
                 model="skipped",
             )
-
-            continue
-
-        if not text.strip():
-            placeholders[index] = SentimentResult(
+        elif not text.strip():
+            results[index] = SentimentResult(
                 text=text,
                 label="Neutral",
                 confidence=0.0,
                 model="skipped",
             )
+        else:
+            valid_indices.append(index)
+            valid_texts.append(text)
 
-            continue
-
-        non_empty_indices.append(index)
-        non_empty_texts.append(text)
-
-    if not non_empty_texts:
-        return [result for result in placeholders if result is not None]
-
-    classified_results: list[SentimentResult]
+    if not valid_texts:
+        return [result for result in results if result is not None]
 
     if HF_API_TOKEN:
         try:
-            logger.info(
-                "Classifying sentiment through " "the Hugging Face Inference API."
-            )
-
-            classified_results = _classify_via_hf(non_empty_texts)
-
+            logger.info("Classifying sentiment through the Hugging Face API")
+            classified = _classify_via_hf(valid_texts)
         except (
             urllib.error.URLError,
             urllib.error.HTTPError,
             TimeoutError,
             RuntimeError,
             json.JSONDecodeError,
-        ) as api_error:
+        ) as error:
             logger.warning(
-                "Hugging Face API inference failed. "
-                "Attempting local PyTorch inference. Error: %s",
-                api_error,
+                "Hugging Face API failed; trying local inference: %s",
+                error,
             )
-
-            classified_results = _classify_with_local_fallback(non_empty_texts)
-
+            classified = _classify_with_local_fallback(valid_texts)
     else:
-        logger.info("HF_API_TOKEN is not configured. " "Using local PyTorch inference.")
+        logger.info("HF_API_TOKEN is not configured; using local inference")
+        classified = _classify_with_local_fallback(valid_texts)
 
-        classified_results = _classify_with_local_fallback(non_empty_texts)
-
-    if len(classified_results) != len(non_empty_indices):
+    if len(classified) != len(valid_indices):
         raise RuntimeError(
-            "Sentiment classification result count does not "
-            "match the number of valid inputs."
+            "Sentiment result count does not match the valid input count."
         )
 
-    for index, result in zip(
-        non_empty_indices,
-        classified_results,
-    ):
-        placeholders[index] = result
+    for index, result in zip(valid_indices, classified):
+        results[index] = result
 
-    return [result for result in placeholders if result is not None]
+    return [result for result in results if result is not None]
 
 
-def _classify_with_local_fallback(
-    texts: list[str],
-) -> list[SentimentResult]:
-    """
-    Attempt local PyTorch classification.
-    """
-    try:
-        logger.info(
-            "Classifying sentiment locally with " "PyTorch on device: %s",
-            DEVICE,
-        )
-
-        return _classify_via_pytorch(texts)
-
-    except (
-        OSError,
-        RuntimeError,
-        ValueError,
-    ) as pytorch_error:
-        logger.exception(
-            "Local PyTorch inference failed. " "Using lexicon fallback. Error: %s",
-            pytorch_error,
-        )
-
-        return _classify_via_lexicon(texts)
-
-
-def get_sentiment_model_status() -> dict[
-    str,
-    str | bool | float,
-]:
-    if HF_API_TOKEN:
-        primary_method = "hugging-face-api"
-    else:
-        primary_method = "local-pytorch"
-
+def get_sentiment_model_status() -> dict[str, str | bool | float]:
     return {
         "model": HF_MODEL_ID,
-        "primaryMethod": primary_method,
+        "primaryMethod": "hugging-face-api" if HF_API_TOKEN else "local-pytorch",
         "apiTokenConfigured": bool(HF_API_TOKEN),
         "localModelLoaded": _model is not None,
         "pytorchAvailable": True,

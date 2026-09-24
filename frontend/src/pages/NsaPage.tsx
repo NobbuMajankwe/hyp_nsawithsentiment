@@ -30,7 +30,8 @@ export function NsaPage() {
       .then((cfg) => setNsaConfig(cfg))
       .catch(() => {});
   }, [token]);
-
+  
+  console.log(nsaConfig);
   async function handleRun() {
     const lines = datasetText.split("\n").filter((l) => l.trim());
     if (lines.length === 0 || !token) return;
@@ -94,7 +95,7 @@ export function NsaPage() {
       >
         <Stack spacing={3}>
           <Box sx={{ borderRadius: 5, bgcolor: "#111827", border: "1px solid rgba(229,231,235,0.8)", overflow: 'hidden' }}>
-            <InputPanel value={datasetText} onChange={setDatasetText} onRun={handleRun} onReset={handleReset} loading={loading} />
+            <InputPanel value={datasetText} onChange={setDatasetText} onRun={handleRun} onReset={handleReset} loading={loading} url={nsaConfig?.apiUrl}/>
           </Box>
           <FeedbackCanvas results={results} />
          {/* {results.length > 1000 && <AnalyticsCharts results={results} />} */}

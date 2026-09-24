@@ -549,7 +549,7 @@ function AnalysisResultDetails({
 }) {
   return (
     <>
-      <DetailBlock
+      {/* <DetailBlock
         title="Raw feedback"
         value={item.originalText || "No feedback text"}
       />
@@ -558,7 +558,7 @@ function AnalysisResultDetails({
         title="Cleaned output"
         value={item.cleanedText || "NULL"}
         mono
-      />
+      /> */}
 
       <Box
         sx={{
@@ -610,12 +610,12 @@ function AnalysisResultDetails({
         }
       />
 
-      <DetailBlock
+     {/*  <DetailBlock
         title="NSA status"
         value={item.nsaStatus}
         mono
       />
-
+ */}
       <DetailBlock
         title="Anomaly score"
         value={`${item.anomalyScore}%`}
@@ -632,7 +632,7 @@ function SentimentResultDetails({
 }) {
   return (
     <>
-      <DetailBlock
+     {/*  <DetailBlock
         title="Raw feedback"
         value={item.originalText || "No feedback text"}
       />
@@ -641,7 +641,7 @@ function SentimentResultDetails({
         title="Sentiment label"
         value={item.label}
         mono
-      />
+      /> */}
 
       <DetailBlock
         title="Confidence"

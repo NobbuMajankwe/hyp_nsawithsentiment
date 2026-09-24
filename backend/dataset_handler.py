@@ -1,24 +1,18 @@
-"""
-Handles CSV and JSON file uploads, parsing, and storage in the database.
-"""
-
 from __future__ import annotations
 
 import csv
 import json
 import io
-from typing import List, Dict, Any
-from datetime import datetime
+from collections.abc import Iterable
+from typing import Any
 from database import get_cursor
 
 
 class DatasetParseError(Exception):
     """Raised when a dataset file cannot be parsed."""
 
-    pass
 
-
-def parse_csv_file(file_content: bytes, encoding: str = "utf-8") -> List[str]:
+def parse_csv_file(file_content: bytes, encoding: str = "utf-8") -> list[str]:
 
     try:
         text_content = file_content.decode(encoding)
@@ -64,11 +58,11 @@ def parse_csv_file(file_content: bytes, encoding: str = "utf-8") -> List[str]:
         raise DatasetParseError(f"Cannot decode CSV file with {encoding} encoding")
     except csv.Error as e:
         raise DatasetParseError(f"CSV parsing error: {str(e)}")
-    except Exception as e:
-        raise DatasetParseError(f"Unexpected error parsing CSV: {str(e)}")
+    except Exception as exc:
+        raise DatasetParseError(f"Unexpected error parsing CSV: {exc}")
 
 
-def parse_json_file(file_content: bytes, encoding: str = "utf-8") -> List[str]:
+def parse_json_file(file_content: bytes, encoding: str = "utf-8") -> list[str]:
 
     try:
         text_content = file_content.decode(encoding)
@@ -126,17 +120,17 @@ def parse_json_file(file_content: bytes, encoding: str = "utf-8") -> List[str]:
         raise DatasetParseError(f"Invalid JSON format: {str(e)}")
     except UnicodeDecodeError:
         raise DatasetParseError(f"Cannot decode JSON file with {encoding} encoding")
-    except Exception as e:
-        raise DatasetParseError(f"Unexpected error parsing JSON: {str(e)}")
+    except Exception as exc:
+        raise DatasetParseError(f"Unexpected error parsing JSON: {exc}")
 
 
 def save_dataset_to_db(
     user_id: int,
     source_name: str,
     source_type: str,
-    feedback_texts: List[str],
-    file_path: str = None,
-    description: str = None,
+    feedback_texts: list[str],
+    file_path: str | None = None,
+    description: str | None = None,
 ) -> int:
 
     with get_cursor(commit=True) as cur:
@@ -198,7 +192,7 @@ def save_dataset_to_db(
 
 def get_user_datasets(
     user_id: int, limit: int = 50, offset: int = 0
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
 
     with get_cursor() as cur:
         cur.execute(
@@ -236,7 +230,7 @@ def get_user_datasets(
         ]
 
 
-def get_dataset_by_id(dataset_id: int, user_id: int = None) -> Dict[str, Any] | None:
+def get_dataset_by_id(dataset_id: int, user_id: int = None) -> dict[str, Any] | None:
 
     with get_cursor() as cur:
         query = """
@@ -283,7 +277,7 @@ def get_dataset_by_id(dataset_id: int, user_id: int = None) -> Dict[str, Any] | 
 
 def get_dataset_feedback(
     dataset_id: int, limit: int = 100, offset: int = 0
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
 
     with get_cursor() as cur:
         cur.execute(

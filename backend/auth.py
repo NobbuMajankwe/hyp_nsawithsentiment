@@ -1,5 +1,3 @@
-
-
 from __future__ import annotations
 
 import base64
@@ -10,14 +8,15 @@ import os
 import re
 import time
 from dataclasses import dataclass
-from typing import Optional
 
 from database import get_cursor
 
 
-JWT_SECRET: str = os.getenv("JWT_SECRET", "eventsense-dev-secret-change-in-prod")
-JWT_EXPIRY_SECONDS: int = 60 * 60 * 8 #8 HOURS
-VALID_ROLES = {"EVENT_ORGANISER", "SYSTEM_ADMIN"} # For now have similar roles
+JWT_SECRET = os.getenv("JWT_SECRET", "eventsense-dev-secret-change-in-prod")
+JWT_EXPIRY_SECONDS = 8 * 60 * 60
+VALID_ROLES = {"EVENT_ORGANISER", "SYSTEM_ADMIN"}
+PBKDF2_ITERATIONS = 260_000
+
 
 @dataclass
 class UserRecord:
@@ -30,35 +29,41 @@ class UserRecord:
 
 
 def _b64url_encode(data: bytes) -> str:
-    return base64.urlsafe_b64encode(data).rstrip(b"=").decode()
+    return base64.urlsafe_b64encode(data).rstrip(b"=").decode("utf-8")
 
 
-def _b64url_decode(s: str) -> bytes:
-    pad = 4 - len(s) % 4
-    return base64.urlsafe_b64decode(s + "=" * pad)
+def _b64url_decode(value: str) -> bytes:
+    padding = "=" * (-len(value) % 4)
+    return base64.urlsafe_b64decode(value + padding)
 
 
 def _create_jwt(payload: dict) -> str:
-    header = _b64url_encode(json.dumps({"alg": "HS256", "typ": "JWT"}).encode())
-    body = _b64url_encode(json.dumps(payload).encode())
-    sig = hmac.new(
-        JWT_SECRET.encode(),
-        f"{header}.{body}".encode(),
+    header = _b64url_encode(json.dumps({"alg": "HS256", "typ": "JWT"}).encode("utf-8"))
+    body = _b64url_encode(json.dumps(payload).encode("utf-8"))
+
+    signature = hmac.new(
+        JWT_SECRET.encode("utf-8"),
+        f"{header}.{body}".encode("utf-8"),
         hashlib.sha256,
     ).digest()
-    return f"{header}.{body}.{_b64url_encode(sig)}"
+
+    return f"{header}.{body}.{_b64url_encode(signature)}"
 
 
-def _verify_jwt(token: str) -> Optional[dict]:
+def _verify_jwt(token: str) -> dict | None:
     try:
-        header, body, sig = token.split(".")
-        expected = hmac.new(
-            JWT_SECRET.encode(),
-            f"{header}.{body}".encode(),
+        header, body, signature = token.split(".")
+
+        expected_signature = hmac.new(
+            JWT_SECRET.encode("utf-8"),
+            f"{header}.{body}".encode("utf-8"),
             hashlib.sha256,
         ).digest()
 
-        if not hmac.compare_digest(_b64url_decode(sig), expected):
+        if not hmac.compare_digest(
+            _b64url_decode(signature),
+            expected_signature,
+        ):
             return None
 
         payload = json.loads(_b64url_decode(body))
@@ -67,93 +72,125 @@ def _verify_jwt(token: str) -> Optional[dict]:
             return None
 
         return payload
-
-    except Exception:
+    except (ValueError, TypeError, json.JSONDecodeError):
         return None
 
 
 def create_access_token(user: UserRecord) -> str:
-    return _create_jwt({
-        "sub": str(user.user_id),
-        "email": user.email,
-        "role": user.role,
-        "name": user.full_name,
-        "iat": int(time.time()),
-        "exp": int(time.time()) + JWT_EXPIRY_SECONDS,
-    })
+    now = int(time.time())
+
+    return _create_jwt(
+        {
+            "sub": str(user.user_id),
+            "email": user.email,
+            "role": user.role,
+            "name": user.full_name,
+            "iat": now,
+            "exp": now + JWT_EXPIRY_SECONDS,
+        }
+    )
 
 
-def decode_access_token(token: str) -> Optional[dict]:
+def decode_access_token(token: str) -> dict | None:
     return _verify_jwt(token)
 
 
 try:
-    import bcrypt as _bcrypt
-
-    def hash_password(plain: str) -> str:
-        return _bcrypt.hashpw(plain.encode(), _bcrypt.gensalt(12)).decode()
-
-    def verify_password(plain: str, hashed: str) -> bool:
-        return _bcrypt.checkpw(plain.encode(), hashed.encode())
-
+    import bcrypt
 except ImportError:
-    _ITER = 260_000
+    bcrypt = None
 
-    def hash_password(plain: str) -> str:
-        salt = os.urandom(16).hex()
-        dk = hashlib.pbkdf2_hmac("sha256", plain.encode(), salt.encode(), _ITER)
-        return f"pbkdf2:{salt}:{dk.hex()}"
 
-    def verify_password(plain: str, hashed: str) -> bool:
-        if not hashed.startswith("pbkdf2:"):
+def hash_password(password: str) -> str:
+    if bcrypt is not None:
+        return bcrypt.hashpw(
+            password.encode("utf-8"),
+            bcrypt.gensalt(rounds=12),
+        ).decode("utf-8")
+
+    salt = os.urandom(16).hex()
+    password_hash = hashlib.pbkdf2_hmac(
+        "sha256",
+        password.encode("utf-8"),
+        salt.encode("utf-8"),
+        PBKDF2_ITERATIONS,
+    )
+
+    return f"pbkdf2:{salt}:{password_hash.hex()}"
+
+
+def verify_password(password: str, stored_hash: str) -> bool:
+    if stored_hash.startswith("pbkdf2:"):
+        try:
+            _, salt, expected_hash = stored_hash.split(":", 2)
+        except ValueError:
             return False
 
-        _, salt, stored = hashed.split(":", 2)
-        dk = hashlib.pbkdf2_hmac("sha256", plain.encode(), salt.encode(), _ITER)
-        return hmac.compare_digest(dk.hex(), stored)
+        password_hash = hashlib.pbkdf2_hmac(
+            "sha256",
+            password.encode("utf-8"),
+            salt.encode("utf-8"),
+            PBKDF2_ITERATIONS,
+        )
+
+        return hmac.compare_digest(password_hash.hex(), expected_hash)
+
+    if bcrypt is None:
+        return False
+
+    try:
+        return bcrypt.checkpw(
+            password.encode("utf-8"),
+            stored_hash.encode("utf-8"),
+        )
+    except ValueError:
+        return False
 
 
-def _validate_password_strength(password: str) -> None:
+def _validate_password(password: str) -> None:
     if len(password) < 8:
         raise ValueError("Password must be at least 8 characters.")
+
     if not re.search(r"[A-Z]", password):
         raise ValueError("Password must contain at least one uppercase letter.")
+
     if not re.search(r"[a-z]", password):
         raise ValueError("Password must contain at least one lowercase letter.")
+
     if not re.search(r"\d", password):
         raise ValueError("Password must contain at least one number.")
 
 
-def _normalize_role(role: str) -> str:
-    role = role.strip().upper()
+def _normalise_role(role: str) -> str:
+    normalised_role = role.strip().upper()
 
-    if role == "EVENT_ORGANISER":
-        return "EVENT_ORGANISER"
+    if normalised_role not in VALID_ROLES:
+        raise ValueError("Role must be EVENT_ORGANISER or SYSTEM_ADMIN.")
 
-    if role == "SYSTEM_ADMIN":
-        return "SYSTEM_ADMIN"
-
-    raise ValueError("Role must be EVENT_ORGANISER or SYSTEM_ADMIN.")
+    return normalised_role
 
 
 def _row_to_user(row: dict) -> UserRecord:
+    created_at = row["created_at"]
+
+    if hasattr(created_at, "timestamp"):
+        created_at = created_at.timestamp()
+    else:
+        created_at = float(created_at)
+
     return UserRecord(
         user_id=int(row["user_id"]),
         full_name=row["full_name"],
         email=row["email"],
         role=row["role"],
         password_hash=row["password_hash"],
-        created_at=(
-            row["created_at"].timestamp()
-            if hasattr(row["created_at"], "timestamp")
-            else float(row["created_at"])
-        ),
+        created_at=created_at,
     )
 
 
-def get_user_by_email(email: str) -> Optional[UserRecord]:
-    with get_cursor() as cur:
-        cur.execute(
+def get_user_by_email(email: str) -> UserRecord | None:
+    with get_cursor() as cursor:
+        cursor.execute(
             """
             SELECT *
             FROM users
@@ -162,14 +199,14 @@ def get_user_by_email(email: str) -> Optional[UserRecord]:
             """,
             (email.strip(),),
         )
-        row = cur.fetchone()
+        row = cursor.fetchone()
 
     return _row_to_user(row) if row else None
 
 
-def get_user_by_id(user_id: int | str) -> Optional[UserRecord]:
-    with get_cursor() as cur:
-        cur.execute(
+def get_user_by_id(user_id: int | str) -> UserRecord | None:
+    with get_cursor() as cursor:
+        cursor.execute(
             """
             SELECT *
             FROM users
@@ -178,7 +215,7 @@ def get_user_by_id(user_id: int | str) -> Optional[UserRecord]:
             """,
             (int(user_id),),
         )
-        row = cur.fetchone()
+        row = cursor.fetchone()
 
     return _row_to_user(row) if row else None
 
@@ -191,26 +228,21 @@ def create_user(
 ) -> UserRecord:
     full_name = full_name.strip()
     email = email.strip().lower()
-    role = _normalize_role(role)
+    role = _normalise_role(role)
 
-    if not full_name or len(full_name) < 2:
+    if len(full_name) < 2:
         raise ValueError("Full name must be at least 2 characters.")
 
-    if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
+    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
         raise ValueError("Invalid email address.")
 
-    if role not in VALID_ROLES:
-        raise ValueError("Role must be EVENT_ORGANISER or SYSTEM_ADMIN.")
-
-    _validate_password_strength(password)
+    _validate_password(password)
 
     if get_user_by_email(email):
         raise ValueError("An account with this email already exists.")
 
-    password_hash = hash_password(password)
-
-    with get_cursor(commit=True) as cur:
-        cur.execute(
+    with get_cursor(commit=True) as cursor:
+        cursor.execute(
             """
             INSERT INTO users (
                 full_name,
@@ -221,53 +253,44 @@ def create_user(
             VALUES (%s, %s, %s, %s)
             RETURNING *
             """,
-            (full_name, email, password_hash, role),
+            (
+                full_name,
+                email,
+                hash_password(password),
+                role,
+            ),
         )
-        row = cur.fetchone()
+        row = cursor.fetchone()
 
     return _row_to_user(row)
 
 
-def authenticate_user(email: str, password: str) -> Optional[UserRecord]:
+def authenticate_user(email: str, password: str) -> UserRecord | None:
     user = get_user_by_email(email)
 
-    if not user:
-        return None
-
-    if not verify_password(password, user.password_hash):
+    if not user or not verify_password(password, user.password_hash):
         return None
 
     return user
 
+
 def reset_user_password(email: str, new_password: str) -> bool:
-    """
-    Reset a user's password using their registered email address.
-
-    Prototype note:
-    In a production system, this should use an emailed reset token.
-    For this prototype, the function directly resets the password after
-    validating the email and new password.
-    """
-    email = email.strip().lower()
-
-    user = get_user_by_email(email)
+    user = get_user_by_email(email.strip().lower())
 
     if not user:
         return False
 
-    _validate_password_strength(new_password)
+    _validate_password(new_password)
 
-    new_password_hash = hash_password(new_password)
-
-    with get_cursor(commit=True) as cur:
-        cur.execute(
+    with get_cursor(commit=True) as cursor:
+        cursor.execute(
             """
             UPDATE users
             SET password_hash = %s
             WHERE user_id = %s
             """,
             (
-                new_password_hash,
+                hash_password(new_password),
                 user.user_id,
             ),
         )
