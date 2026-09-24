@@ -16,9 +16,7 @@ from sklearn.preprocessing import Normalizer
 # Run once
 nltk.download("punkt")
 nltk.download("stopwords")
-# ---------------------------------------------------------------------------
 # Constants - # Helper function to load stop words from database
-# ---------------------------------------------------------------------------
 # STOP_WORDS = set(stopwords.words("english"))
 
 
@@ -67,9 +65,7 @@ def load_stopawords_from_db() -> set[str]:
         return [record["raw_text"] for record in records]
 
 
-# ---------------------------------------------------------------------------
 # Helper function to load normal corpus from database
-# ---------------------------------------------------------------------------
 
 
 def load_normal_corpus_from_db() -> list[str]:
@@ -124,9 +120,7 @@ def load_normal_corpus_from_db() -> list[str]:
         return [record["raw_text"] for record in records]
 
 
-# ---------------------------------------------------------------------------
 # Data classes
-# ---------------------------------------------------------------------------
 
 
 @dataclass
@@ -175,9 +169,7 @@ class NSAResponse:
     results: list[NSAResult]
 
 
-# ---------------------------------------------------------------------------
 # Text utilities
-# ---------------------------------------------------------------------------
 
 
 def preprocess(text: str) -> str:
@@ -227,9 +219,7 @@ def tokenise(text: str) -> list[str]:
 #     ]
 
 
-# ---------------------------------------------------------------------------
 # Vectorisation — pure Python bag-of-words (no sklearn)
-# ---------------------------------------------------------------------------
 
 
 vectorizer = CountVectorizer(tokenizer=tokenise, lowercase=False, token_pattern=None)
@@ -262,37 +252,16 @@ def text_to_vector(text: str, vocabulary: list[str] | None = None) -> list[float
     return vector.toarray()[0].tolist()
 
 
-# ---------------------------------------------------------------------------
 # Distance metric
-# ---------------------------------------------------------------------------
-
-
 def euclidean_distance(v1: list[float], v2: list[float]) -> float:
     return math.sqrt(
         sum((a - b) ** 2 for a, b in zip(v1, v2))
     )  # TODO further understanding
 
 
-# ---------------------------------------------------------------------------
 # Core NSA class
-# ---------------------------------------------------------------------------
-
 
 class NegativeSelectionAlgorithm:
-    """
-    Implements V-detector–style Negative Selection.
-
-    Parameters
-    ----------
-    detector_count       : how many non-self detectors to generate
-    detector_radius      : detection radius (r); a vector within this
-                           distance of a detector is flagged
-    self_match_threshold : minimum distance a candidate must have from ALL
-                           self vectors to be accepted as a detector
-    max_attempts         : cap on random candidates tried during generation
-    random_seed          : reproducibility seed
-    """
-
     def __init__(
         self,
         detector_count: int = 50,
@@ -311,20 +280,13 @@ class NegativeSelectionAlgorithm:
         self.self_vectors: list[list[float]] = []
         self.detectors: list[Detector] = []
 
-        # Seed the PRNG once
         import random as _rnd
 
         self._rnd = _rnd.Random(random_seed)
 
-    # ------------------------------------------------------------------
     # Training phase
-    # ------------------------------------------------------------------
 
     def train(self, normal_corpus: list[str]) -> None:
-        """
-        Build vocabulary from the normal corpus, vectorise it, then
-        generate detectors that avoid the self space.
-        """
         # Step 1 — vocabulary from normal samples
         self.vocabulary = build_vocabulary(normal_corpus)
 
@@ -338,11 +300,8 @@ class NegativeSelectionAlgorithm:
 
     def _generate_detectors(self) -> None:
         """
-        Randomly sample candidate vectors in [0, 1]^d.
         Accept a candidate only if its minimum distance to every self vector
-        exceeds self_match_threshold (i.e., it does NOT match self).
-
-        This is the NSA "censoring" step.
+        exceeds self_match_threshold (checking if it does NOT match self).
         """
         dimensions = len(self.vocabulary)
         if dimensions == 0:
@@ -392,14 +351,11 @@ class NegativeSelectionAlgorithm:
                         ),
                     )
 
-    # ------------------------------------------------------------------
     # Detection phase
-    # ------------------------------------------------------------------
 
     def detect_oneold(self, text: str, record_id: int) -> NSAResult:
         """
-        Run a single feedback string through the detection pipeline.
-
+        Runs a single feedback string through the detection pipeline.
         Returns an NSAResult with status, score and reason.
         """
         cleaned = preprocess(text)
@@ -638,9 +594,7 @@ class NegativeSelectionAlgorithm:
         )
 
 
-# ---------------------------------------------------------------------------
 # Module-level cache (trained once per unique config entry)
-# ---------------------------------------------------------------------------
 
 # Preset NSA parameters
 NSA_DEFAULT_DETECTOR_COUNT: int = 200
