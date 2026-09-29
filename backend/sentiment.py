@@ -57,8 +57,8 @@ def _get_device() -> torch.device:
 
 
 DEVICE = _get_device()
-_tokenizer: Optional[PreTrainedTokenizerBase] = None
-_model: Optional[PreTrainedModel] = None
+_tokenizer: Optional[PreTrainedTokenizerBase] = None  # noqa: UP045
+_model: Optional[PreTrainedModel] = None  # noqa: UP045
 _model_lock = threading.Lock()
 
 
@@ -129,7 +129,7 @@ def _hf_classify_batch(texts: list[str]) -> list[dict[str, str | float]]:
         raise RuntimeError(f"Hugging Face API error: {data['error']}")
 
     if not isinstance(data, list):
-        raise RuntimeError("Unexpected response received from Hugging Face API.")
+        raise RuntimeError("Unexpected response received from Hugging Face API.")  # noqa: TRY004
 
     results: list[dict[str, str | float]] = []
 
@@ -141,7 +141,7 @@ def _hf_classify_batch(texts: list[str]) -> list[dict[str, str | float]]:
         elif isinstance(item, dict):
             prediction = item
         else:
-            raise RuntimeError("Unexpected Hugging Face prediction format.")
+            raise RuntimeError("Unexpected Hugging Face prediction format.")  # noqa: TRY004
 
         results.append(
             {
@@ -353,7 +353,7 @@ def _classify_with_local_fallback(texts: list[str]) -> list[SentimentResult]:
     except (OSError, RuntimeError, ValueError) as error:
         logger.exception(
             "Local PyTorch inference failed; using lexicon fallback: %s",
-            error,
+            error,  # noqa: TRY401
         )
         return _classify_via_lexicon(texts)
 
@@ -362,7 +362,7 @@ def classify_sentiment(texts: list[str]) -> list[SentimentResult]:
     if not isinstance(texts, list):
         raise TypeError("texts must be provided as a list.")
 
-    results: list[Optional[SentimentResult]] = [None] * len(texts)
+    results: list[SentimentResult | None] = [None] * len(texts)
     valid_indices: list[int] = []
     valid_texts: list[str] = []
 

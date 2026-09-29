@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useEffect, useRef, useState } from "react";
 import {
   Alert,
@@ -42,7 +43,7 @@ import { PipelineTracker } from "../components/PipelineTracker";
 import { buildSteps } from "../data/pipelineSteps";
 import { fetchLatestValidRecords, runSentimentAnalysis } from "../services/api";
 import { useAuth } from "../context/AuthContext";
-import type { AnalysisResult, SentimentItem, SentimentLabel } from "../types";
+import type { /* AnalysisResult */ SentimentItem, SentimentLabel } from "../types";
 //import { SummaryPanel } from "../components/SummaryPanel";
 import { FeedbackCanvas } from "../components/FeedbackCanvas";
 import { SignalSummaryPanel } from "../components/SignalSummaryPanel";
@@ -83,7 +84,7 @@ export function SentimentPage() {
   const [overrideText, setOverrideText] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const [results, setResults] = useState<SentimentItem[]| AnalysisResult[]>([]);
+  const [results, setResults] = useState<SentimentItem[]/* | AnalysisResult[] */>([]);
   const [summary, setSummary] = useState<{
     pos: number;
     neg: number;
@@ -105,9 +106,9 @@ export function SentimentPage() {
     if (!token) return;
     //setNsaLoading(true);
     fetchLatestValidRecords(token)
-      .then((res) => {
+      .then((res: any) => {
         if (res.found && res.records.length > 0) {
-          setNsaTexts(res.records.map((r) => r.text));
+          setNsaTexts(res.records.map((r: any) => r.text));
           setNsaInfo(res.sessionInfo);
         } else {
           setNsaError(
@@ -161,9 +162,9 @@ export function SentimentPage() {
     if (!token) return;
     setNsaLoading(true);
     fetchLatestValidRecords(token)
-      .then((res) => {
+      .then((res: any) => {
         if (res.found && res.records.length > 0) {
-          setNsaTexts(res.records.map((r) => r.text));
+          setNsaTexts(res.records.map((r: any) => r.text));
           setNsaInfo(res.sessionInfo);
         }
       })

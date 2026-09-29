@@ -1,281 +1,176 @@
 import {
+  Alert,
   Avatar,
   Box,
   Button,
+  Card,
+  CardContent,
   Chip,
   Divider,
-  Paper,
   Stack,
   Typography,
-} from '@mui/material';
+} from "@mui/material";
+import { Link } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
-import { Mail, User, Shield, LogOut, Terminal } from 'lucide-react';
-
-import { useAuth } from '../context/AuthContext';
+const roleLabels: Record<string, string> = {
+  EVENT_ORGANISER: "Event organiser",
+  SYSTEM_ADMIN: "System administrator",
+};
 
 export default function ProfilePage() {
   const { user, logout } = useAuth();
 
   if (!user) {
     return (
-      <Box
-        sx={{
-          minHeight: '100vh',
-          display: 'grid',
-          placeItems: 'center',
-          bgcolor: '#050816',
-          color: '#94a3b8',
-          fontFamily: 'monospace',
-        }}
-      >
-        <Typography>No profile available</Typography>
-      </Box>
+      <Stack spacing={2}>
+        <Typography variant="h4" sx={{fontWeight:700}}>
+          Your profile
+        </Typography>
+        <Alert severity="warning">
+          Your account details are unavailable. Sign in again to reload them.
+        </Alert>
+        <Button
+          variant="outlined"
+          onClick={logout}
+          sx={{ alignSelf: "flex-start" }}
+        >
+          Return to sign in
+        </Button>
+      </Stack>
     );
   }
 
-  const initials = user.fullName
-    .split(' ')
-    .map((x) => x[0])
-    .join('')
+  const name = user.fullName?.trim() || "Account";
+  const initials = name
+    .split(/\s+/)
     .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
     .toUpperCase();
+  const role =
+    roleLabels[user.role] || user.role?.replace(/_/g, " ") || "Not available";
 
   return (
-    <Box
-      sx={{
-        minHeight: '100vh',
-        p: { xs: 2.5, md: 4 },
-        bgcolor: '#050816',
-        backgroundImage: `
-          radial-gradient(circle at top right, rgba(34,211,238,0.12), transparent 30%),
-          radial-gradient(circle at bottom left, rgba(139,92,246,0.1), transparent 35%)
-        `,
-        display: 'grid',
-        placeItems: 'center',
-      }}
-    >
-      <Paper
-        elevation={0}
-        sx={{
-          width: '100%',
-          maxWidth: 680,
-          p: { xs: 3, md: 5 },
-          borderRadius: 4,
-          bgcolor: '#020617',
-          color: '#e5e7eb',
-          border: '1px solid rgba(34,211,238,0.22)',
-          boxShadow: '0 0 45px rgba(34,211,238,0.08)',
-          fontFamily: 'monospace',
-          position: 'relative',
-          overflow: 'hidden',
-        }}
-      >
-        <Box
-          sx={{
-            position: 'absolute',
-            inset: 0,
-            opacity: 0.12,
-            backgroundImage:
-              'linear-gradient(rgba(34,211,238,0.14) 1px, transparent 1px), linear-gradient(90deg, rgba(34,211,238,0.14) 1px, transparent 1px)',
-            backgroundSize: '32px 32px',
-            pointerEvents: 'none',
-          }}
-        />
+    <Stack spacing={3} sx={{ maxWidth: 900, mx: "auto" }}>
+      <Box>
+        <Typography variant="h4" sx={{fontWeight:700}}>
+          Your profile
+        </Typography>
+        <Typography color="text.secondary" sx={{ mt: 1 }}>
+          Account details for your NSA research workspace.
+        </Typography>
+      </Box>
 
-        <Stack spacing={4} sx={{ position: 'relative', zIndex: 1 }}>
-          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-            <Terminal size={16} color="#22d3ee" />
-            <Typography
-              variant="caption"
-              sx={{
-                color: '#22d3ee',
-                textTransform: 'uppercase',
-                letterSpacing: 1,
-                fontWeight: 900,
-                fontFamily: 'monospace',
-              }}
+      <Card variant="outlined" sx={{ borderColor: "rgba(34,211,238,0.25)" }}>
+        <CardContent sx={{ p: { xs: 2.5, sm: 4 } }}>
+          <Stack spacing={3}>
+            <Stack
+              direction={{ xs: "column", sm: "row" }}
+              spacing={2.5}
+              sx={{alignItems:{ xs: "flex-start", sm: "center" }}}
             >
-              ~/eventsense-ai/session/profile
-            </Typography>
-          </Stack>
-
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={3} sx={{ alignItems: 'center' }}>
-            <Avatar
-              sx={{
-                width: 92,
-                height: 92,
-                bgcolor: '#050816',
-                color: '#67e8f9',
-                fontSize: 34,
-                fontWeight: 900,
-                fontFamily: 'monospace',
-                border: '1px solid rgba(34,211,238,0.45)',
-                boxShadow: '0 0 28px rgba(34,211,238,0.25)',
-              }}
-            >
-              {initials}
-            </Avatar>
-
-            <Box sx={{ textAlign: { xs: 'center', sm: 'left' } }}>
-              <Chip
-                label="$ authenticated_user"
-                size="small"
+              <Avatar
+                aria-hidden="true"
                 sx={{
-                  mb: 1,
-                  bgcolor: 'rgba(34,211,238,0.1)',
-                  color: '#67e8f9',
-                  border: '1px solid rgba(34,211,238,0.3)',
-                  fontWeight: 800,
-                  fontFamily: 'monospace',
-                }}
-              />
-
-              <Typography
-                sx={{
-                  fontWeight: 900,
-                  fontSize: { xs: 30, md: 38 },
-                  color: '#f8fafc',
-                  fontFamily: 'monospace',
-                  lineHeight: 1,
+                  width: 76,
+                  height: 76,
+                  fontSize: 28,
+                  fontWeight: 700,
+                  bgcolor: "rgba(34,211,238,0.14)",
+                  color: "#67e8f9",
                 }}
               >
-                {user.fullName}
-              </Typography>
-
-              <Typography sx={{ mt: 1, color: '#94a3b8', fontFamily: 'monospace' }}>
-                role: {user.role.replace('_', ' ')}
-              </Typography>
+                {initials}
+              </Avatar>
+              <Box sx={{ minWidth: 0 }}>
+                <Typography
+                  variant="h5"
+                  
+                  sx={{ overflowWrap: "anywhere", fontWeight:700 }}
+                >
+                  {name}
+                </Typography>
+                <Chip
+                  label={role}
+                  size="small"
+                  variant="outlined"
+                  sx={{ mt: 1 }}
+                />
+              </Box>
+            </Stack>
+            <Divider />
+            <Box
+              component="dl"
+              sx={{
+                m: 0,
+                display: "grid",
+                gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" },
+                gap: 3,
+              }}
+            >
+              <ProfileField
+                label="Full name"
+                value={user.fullName || "Not available"}
+              />
+              <ProfileField
+                label="Email address"
+                value={user.email || "Not available"}
+              />
+              <ProfileField label="Account role" value={role} />
+              <ProfileField
+                label="Account ID"
+                value={user.id == null ? "Not available" : String(user.id)}
+              />
             </Box>
           </Stack>
+        </CardContent>
+      </Card>
 
-          <Divider sx={{ borderColor: 'rgba(148,163,184,0.16)' }} />
-
-          <Stack spacing={2}>
-            <ProfileRow icon={<Mail size={18} />} label="email" value={user.email} />
-            <ProfileRow icon={<Shield size={18} />} label="role" value={user.role.replace('_', ' ')} />
-            <ProfileRow icon={<User size={18} />} label="user_id" value={String(user.id)} />
+      <Card>
+        <CardContent>
+          <Typography variant="h6" gutterBottom>
+            Your research workspace
+          </Typography>
+          <Typography color="text.secondary" sx={{ mb: 2 }}>
+            Prepare training and evaluation datasets, run NSA experiments, and
+            review their results.
+          </Typography>
+          <Stack direction="row" spacing={1.5} useFlexGap sx={{flexWrap:"wrap"}}>
+            <Button component={Link} to="/datasets" variant="outlined">
+              Manage datasets
+            </Button>
+            <Button component={Link} to="/nsa" variant="outlined">
+              Run experiment
+            </Button>
+            <Button component={Link} to="/dashboard" variant="outlined">
+              Experiment history
+            </Button>
           </Stack>
+        </CardContent>
+      </Card>
 
-          <Paper
-            elevation={0}
-            sx={{
-              p: 3,
-              bgcolor: '#050816',
-              borderRadius: 3,
-              border: '1px solid rgba(34,211,238,0.16)',
-            }}
-          >
-            <Typography
-              sx={{
-                fontWeight: 900,
-                mb: 1,
-                color: '#f8fafc',
-                fontFamily: 'monospace',
-              }}
-            >
-              &gt; eventsense_account.permissions
-            </Typography>
-
-            <Typography
-              sx={{
-                color: '#94a3b8',
-                lineHeight: 1.8,
-                fontFamily: 'monospace',
-              }}
-            >
-              This account manages datasets, NSA anomaly scans, sentiment reports,
-              insight generation, and system configuration.
-            </Typography>
-          </Paper>
-
-          <Button
-            fullWidth
-            size="large"
-            variant="contained"
-            startIcon={<LogOut size={18} />}
-            onClick={logout}
-            sx={{
-              py: 1.6,
-              borderRadius: 2,
-              bgcolor: 'rgba(248,113,113,0.14)',
-              color: '#fca5a5',
-              border: '1px solid rgba(248,113,113,0.35)',
-              fontWeight: 900,
-              fontFamily: 'monospace',
-              boxShadow: 'none',
-              '&:hover': {
-                bgcolor: 'rgba(248,113,113,0.22)',
-                boxShadow: '0 0 24px rgba(248,113,113,0.18)',
-              },
-            }}
-          >
-            logout --session
-          </Button>
-        </Stack>
-      </Paper>
-    </Box>
+      <Box>
+        <Button variant="outlined" color="error" onClick={logout}>
+          Sign out
+        </Button>
+      </Box>
+    </Stack>
   );
 }
 
-interface RowProps {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-}
-
-function ProfileRow({ icon, label, value }: RowProps) {
+function ProfileField({ label, value }: { label: string; value: string }) {
   return (
-    <Paper
-      elevation={0}
-      sx={{
-        p: 2.2,
-        borderRadius: 3,
-        bgcolor: '#050816',
-        border: '1px solid rgba(148,163,184,0.16)',
-        display: 'flex',
-        gap: 2,
-        alignItems: 'center',
-      }}
-    >
-      <Box
-        sx={{
-          width: 42,
-          height: 42,
-          borderRadius: 2.5,
-          bgcolor: 'rgba(34,211,238,0.08)',
-          color: '#22d3ee',
-          border: '1px solid rgba(34,211,238,0.2)',
-          display: 'grid',
-          placeItems: 'center',
-          flexShrink: 0,
-        }}
+    <Box>
+      <Typography component="dt" variant="body2" color="text.secondary">
+        {label}
+      </Typography>
+      <Typography
+        component="dd"
+        sx={{ m: 0, mt: 0.5, fontWeight: 600, overflowWrap: "anywhere" }}
       >
-        {icon}
-      </Box>
-
-      <Box sx={{ minWidth: 0 }}>
-        <Typography
-          variant="caption"
-          sx={{
-            color: '#64748b',
-            fontFamily: 'monospace',
-            fontWeight: 800,
-          }}
-        >
-          {label}
-        </Typography>
-
-        <Typography
-          sx={{
-            fontWeight: 800,
-            color: '#e5e7eb',
-            fontFamily: 'monospace',
-            wordBreak: 'break-word',
-          }}
-        >
-          {value}
-        </Typography>
-      </Box>
-    </Paper>
+        {value}
+      </Typography>
+    </Box>
   );
 }

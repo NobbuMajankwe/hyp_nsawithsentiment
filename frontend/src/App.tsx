@@ -3,7 +3,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { Box } from '@mui/material';
 
 import { Header, SIDENAV_WIDTH, SIDENAV_COLLAPSED_WIDTH, HEADER_HEIGHT } from './components/Header';
-import { SentimentPage } from './pages/SentimentPage';
+//import { SentimentPage } from './pages/SentimentPage';
 import { InsightStoryPage } from './pages/InsightStoryPage';
 import { NsaPage } from './pages/NsaPage';
 import { LoginPage, RegisterPage, ResetPasswordPage } from './pages/LoginPage';
@@ -11,10 +11,12 @@ import ProfilePage from './pages/ProfilePage';
 import Dashboard from './pages/Dashboard';
 import { useAuth } from './context/AuthContext';
 import Settings from './pages/Settings';
+import DatasetsPage from './pages/DatasetsPage';
+import ExperimentPage from './pages/ExperimentPage';
 
-// ---------------------------------------------------------------------------
+// ---------------------------------
 // Auth gate — unauthenticated users see login/register/reset
-// ---------------------------------------------------------------------------
+// ---------------------------------
 
 function AuthGate() {
   const [view, setView] = useState<'login' | 'register' | 'reset'>('login');
@@ -34,9 +36,9 @@ function AuthGate() {
   }
 }
 
-// ---------------------------------------------------------------------------
+// ---------------------------------
 // Protected shell — header + sidenav + routed content
-// ---------------------------------------------------------------------------
+// ---------------------------------
 
 function AppShell() {
   const [expanded, setExpanded] = useState(true);
@@ -58,11 +60,13 @@ function AppShell() {
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/nsa" element={<NsaPage />} />
-          <Route path="/sentiment" element={<SentimentPage />} />
+          {/* <Route path="/sentiment" element={<SentimentPage />} /> */}
           <Route path="/insight" element={<InsightStoryPage />} />
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/analytics" element={<ProfilePage />} />
+          <Route path="/datasets" element={<DatasetsPage />} />
+          <Route path="/experiments/:experimentId" element={<ExperimentPage />} />
           {/* Catch-all back to dashboard */}
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
@@ -71,9 +75,9 @@ function AppShell() {
   );
 }
 
-// ---------------------------------------------------------------------------
+// ---------------------------------
 // Root — switches between auth gate and app shell
-// ---------------------------------------------------------------------------
+// ---------------------------------
 
 export default function App() {
   const { isAuthenticated } = useAuth();

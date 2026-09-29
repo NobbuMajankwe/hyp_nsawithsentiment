@@ -12,13 +12,13 @@ import {
 } from '@mui/material';
 import {
   //BarChart2,
-  BrainCircuit,
+  //BrainCircuit,
   ChevronLeft,
   ChevronRight,
-  FileText,
+  //FileText,
   Gauge,
   LogOut,
-  Settings2,
+  //Settings2,
   ShieldCheck,
   User,
 } from 'lucide-react';
@@ -43,9 +43,10 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { path: '/dashboard', icon: <Gauge size={18} />,      label: 'Dashboard',     sublabel: 'Overview' },
   { path: '/nsa',       icon: <ShieldCheck size={18} />, label: 'NSA Analysis',  sublabel: 'Anomaly detection' },
-  { path: '/sentiment', icon: <BrainCircuit size={18} />,label: 'Sentiment',     sublabel: 'Classify sentiment' },
+  // { path: '/sentiment', icon: <BrainCircuit size={18} />,label: 'Sentiment',     sublabel: 'Classify sentiment' },
+   /*{ path: '/experiments',   icon: <FileText size={18} />,    label: 'Experiment Reports', sublabel: 'Coming soon' },
   { path: '/insight',   icon: <FileText size={18} />,    label: 'Insight Reports', sublabel: 'Coming soon' },
-  { path: '/settings',  icon: <Settings2 size={18} />,   label: 'Settings',      sublabel: 'Configuration' },
+  { path: '/settings',  icon: <Settings2 size={18} />,   label: 'Settings',      sublabel: 'Configuration' }, */
   /* { path: '/analytics', icon: <BarChart2 size={18} />,   label: 'Analytics',     sublabel: 'Reports' },*/
 ]; 
 

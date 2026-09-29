@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useEffect, useRef, useState } from "react";
 import {
   Alert,
@@ -64,9 +63,9 @@ const ARRAY_KEYS = [
 function cleanText(value: string): string {
   return value.replace(/\s+/g, " ").trim();
 }
-// ---------------------------------------------------------------------------
+// ---------------------------------
 // File and API response parsing helpers
-// ---------------------------------------------------------------------------
+// ---------------------------------
 
 function parseTxt(text: string): string {
   return text
@@ -162,52 +161,52 @@ function parseCsv(text: string): string {
 }
 
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function extractFeedbacks(value: unknown): string[] {
-  if (typeof value === "string") {
-    const text = cleanText(value);
-    return text ? [text] : [];
-  }
+ 
+// function extractFeedbacks(value: unknown): string[] {
+//   if (typeof value === "string") {
+//     const text = cleanText(value);
+//     return text ? [text] : [];
+//   }
 
-  if (Array.isArray(value)) {
-    return value.flatMap(extractFeedback);
-  }
+//   if (Array.isArray(value)) {
+//     return value.flatMap(extractFeedback);
+//   }
 
-  if (!value || typeof value !== "object") {
-    return [];
-  }
+//   if (!value || typeof value !== "object") {
+//     return [];
+//   }
 
-  const objectValue = value as Record<string, unknown>;
-  const records: string[] = [];
+//   const objectValue = value as Record<string, unknown>;
+//   const records: string[] = [];
 
-  for (const [key, itemValue] of Object.entries(objectValue)) {
-    const normalizedKey = key.toLowerCase();
+//   for (const [key, itemValue] of Object.entries(objectValue)) {
+//     const normalizedKey = key.toLowerCase();
 
-    if (
-      typeof itemValue === "string" &&
-      TEXT_KEYS.some((textKey) => normalizedKey.includes(textKey))
-    ) {
-      const text = cleanText(itemValue);
-      if (text) records.push(text);
-    }
-  }
+//     if (
+//       typeof itemValue === "string" &&
+//       TEXT_KEYS.some((textKey) => normalizedKey.includes(textKey))
+//     ) {
+//       const text = cleanText(itemValue);
+//       if (text) records.push(text);
+//     }
+//   }
 
-  if (records.length > 0) {
-    return records;
-  }
+//   if (records.length > 0) {
+//     return records;
+//   }
 
-  for (const key of ARRAY_KEYS) {
-    const matchingKey = Object.keys(objectValue).find(
-      (objectKey) => objectKey.toLowerCase() === key,
-    );
+//   for (const key of ARRAY_KEYS) {
+//     const matchingKey = Object.keys(objectValue).find(
+//       (objectKey) => objectKey.toLowerCase() === key,
+//     );
 
-    if (matchingKey) {
-      records.push(...extractFeedback(objectValue[matchingKey]));
-    }
-  }
+//     if (matchingKey) {
+//       records.push(...extractFeedback(objectValue[matchingKey]));
+//     }
+//   }
 
-  return records;
-}
+//   return records;
+// }
 
 function extractFeedback(value: unknown): string[] {
   if (typeof value === "string") {
@@ -358,9 +357,9 @@ async function fetchApiFeedback(apiUrl: string): Promise<string> {
   return parseTxt(text);
 }
 
-// ---------------------------------------------------------------------------
+// ---------------------------------
 // Component
-// ---------------------------------------------------------------------------
+// ---------------------------------
 
 export function InputPanel({
   value,

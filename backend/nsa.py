@@ -1,29 +1,92 @@
 from __future__ import annotations
 
+import hashlib
+
+#import json
 import math
+import random as _rnd
 import re
 import string
-from dataclasses import dataclass, field
-from typing import List, Optional
-from database import get_cursor
-import json
+import time
+from dataclasses import dataclass
+
+#from typing import Optional
 import nltk
-from nltk.corpus import stopwords
-from nltk.tokenize import word_tokenize
+from database import get_cursor
+
+# from nltk.corpus import stopwords
+from nltk.stem import WordNetLemmatizer
+
+#from nltk.tokenize import word_tokenize
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.preprocessing import Normalizer
+
+# Preset NSA parameters
+NSA_DEFAULT_DETECTOR_COUNT = 200
+NSA_DEFAULT_DETECTOR_RADIUS = 0.40
+NSA_DEFAULT_SELF_MATCH_THRESHOLD = 0.75
+NSA_DEFAULT_MAX_ATTEMPTS = 10_000
+NSA_DEFAULT_RANDOM_SEED = 42
+
 
 # Run once
 nltk.download("punkt")
 nltk.download("stopwords")
-# Constants - # Helper function to load stop words from database
-# STOP_WORDS = set(stopwords.words("english"))
+# added stemming
+lemmatizer = WordNetLemmatizer()
 
 
-def load_stopawords_from_db() -> set[str]:
+# Helper function to load normal corpus from database
+def load_normal_corpus_from_db() -> list[str]:
     """
-    Load stop words from the database.
+    Load the SELF / normal feedback corpus used to define self-space.
     """
+
+    with get_cursor() as cur:
+        cur.execute(
+            """
+            SELECT dataset_id
+            FROM datasets
+            WHERE source_name = 'NORMAL_FEEDBACK_SAMPLES'
+            AND source_type = 'JSON'
+            """
+        )
+
+        dataset = cur.fetchone()
+
+        if not dataset:
+            raise RuntimeError("Normal feedback corpus not found in database.")
+
+        cur.execute(
+            """
+            SELECT raw_text
+            FROM feedback_records
+            WHERE dataset_id = %s
+            ORDER BY feedback_id
+            """,
+            (dataset["dataset_id"],),
+        )
+
+        records = cur.fetchall()
+
+    if not records:
+        raise RuntimeError("Normal feedback corpus contains no records.")
+
+    return [row["raw_text"] for row in records]
+
+
+def corpus_hash(corpus: list[str]) -> str:
+    """
+    Create a reproducible fingerprint of the training corpus.
+    """
+
+    canonical = "\n".join(sorted(text.strip() for text in corpus if text.strip()))
+
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()  # noqa: F821
+
+
+# Text utilities
+def load_stopwords_from_db() -> set[str]:
     with get_cursor() as cur:
         cur.execute(
             """
@@ -33,151 +96,29 @@ def load_stopawords_from_db() -> set[str]:
             AND source_type = 'JSON'
             """
         )
-        # rows = cur.fetchone()
+
         dataset = cur.fetchone()
+
         if not dataset:
-            raise RuntimeError(
-                "Stop words not found in database. "
-                "Please upload sample dataset first."
-            )
+            return set()
 
-        dataset_id = dataset["dataset_id"]
-
-        # Get all feedback records for this dataset
         cur.execute(
             """
             SELECT raw_text
             FROM feedback_records
             WHERE dataset_id = %s
-            ORDER BY feedback_id
-        """,
-            (dataset_id,),
+            """,
+            (dataset["dataset_id"],),
         )
 
-        records = cur.fetchall()
+        rows = cur.fetchall()
 
-        if not records:
-            raise RuntimeError(
-                "Stop words dataset exists but has no records. "
-                "Please upload sample dataset first."
-            )
-
-        return [record["raw_text"] for record in records]
-
-
-# Helper function to load normal corpus from database
-
-
-def load_normal_corpus_from_db() -> list[str]:
-    """
-    Load the normal feedback corpus from the database.
-
-    Returns the raw_text of all feedback records from the
-    'NSA Normal Feedback Corpus' training dataset.
-
-    Raises:
-        RuntimeError: If the corpus is not found in the database.
-    """
-    with get_cursor() as cur:
-        # Get the training dataset
-        cur.execute(
-            """
-            SELECT dataset_id
-            FROM datasets
-            WHERE source_name = 'NORMAL_FEEDBACK_SAMPLES'
-            AND source_type = 'JSON'
-        """
-        )
-
-        dataset = cur.fetchone()
-        if not dataset:
-            raise RuntimeError(
-                "Normal feedback corpus not found in database. "
-                "Please upload sample dataset first."
-            )
-
-        dataset_id = dataset["dataset_id"]
-
-        # Get all feedback records for this dataset
-        cur.execute(
-            """
-            SELECT raw_text
-            FROM feedback_records
-            WHERE dataset_id = %s
-            ORDER BY feedback_id
-        """,
-            (dataset_id,),
-        )
-
-        records = cur.fetchall()
-
-        if not records:
-            raise RuntimeError(
-                "Normal feedback corpus dataset exists but has no records. "
-                "Please upload sample dataset first."
-            )
-
-        return [record["raw_text"] for record in records]
-
-
-# Data classes
-
-
-@dataclass
-class Detector:
-    """
-    A single NSA detector.
-
-    Represents a point in feature-vector space that lies OUTSIDE the self
-    region. Any input whose distance to this detector is <= radius triggers
-    a match (anomaly signal).
-    """
-
-    detector_id: int
-    vector: list[float]
-    radius: float
-
-    def matches(self, feature_vector: list[float]) -> Optional[float]:
-        """
-        Return the Euclidean distance if this detector matches the vector,
-        otherwise return None.
-        """
-        dist = euclidean_distance(self.vector, feature_vector)
-        return dist if dist <= self.radius else None
-
-
-@dataclass
-class NSAResult:
-    """Per-record output returned to the API layer."""
-
-    id: int
-    original_text: str
-    cleaned_text: str
-    tokens: list[str]
-    nsa_status: str  # "Valid" | "Suspicious"
-    anomaly_score: int  # 0–100
-    anomaly_reason: str
-
-
-@dataclass
-class NSAResponse:
-    """Aggregate response returned by the analyse() entry point."""
-
-    total_records: int
-    valid_records: int
-    suspicious_records: int
-    results: list[NSAResult]
-
-
-# Text utilities
+    return {row["raw_text"].strip().lower() for row in rows}
 
 
 def preprocess(text: str) -> str:
     """
     Lowercase, remove punctuation, collapse multiple whitespace into one.
-
-    Example:
-        "BUY NOW!! CLICK FREE$$$" -> "buy now  click free"
     """
     text = text.lower()
     # Replace punctuation with space
@@ -189,18 +130,48 @@ def preprocess(text: str) -> str:
     return text
 
 
+def lemmatise_token(token: str) -> str:
+    """
+    Normalise word forms.
+
+    """
+
+    try:
+        # First treat as verb:
+        token = lemmatizer.lemmatize(token, pos="v")
+
+        # Then noun:
+        token = lemmatizer.lemmatize(token, pos="n")
+
+        return token
+
+    except LookupError as exc:
+        raise RuntimeError(
+            "NLTK WordNet data is missing. Run:\n"
+            "python -m nltk.downloader wordnet omw-1.4"
+        ) from exc
+
+
 def tokenise(text: str) -> list[str]:
-    """
-    Split preprocessed text into tokens, remove stopwords, and filter
-    tokens shorter than 2 characters.
-    """
-    cleaned = preprocess(text)
-    stop_words = load_stopawords_from_db()
-    tokens = [
-        token
-        for token in cleaned.split()
-        if token not in stop_words and len(token) >= 2
-    ]
+
+    stop_words = load_stopwords_from_db()
+
+    tokens: list[str] = []
+
+    for token in preprocess(text).split():
+        if not token.isalpha():
+            continue
+
+        if len(token) < 2:
+            continue
+
+        lemma = lemmatise_token(token)
+
+        if lemma in stop_words:
+            continue
+
+        tokens.append(lemma)
+
     return tokens
 
 
@@ -220,15 +191,13 @@ def tokenise(text: str) -> list[str]:
 
 
 # Vectorisation — pure Python bag-of-words (no sklearn)
-
-
 vectorizer = CountVectorizer(tokenizer=tokenise, lowercase=False, token_pattern=None)
 normalizer = Normalizer(norm="l2")
 
 
 def build_vocabulary(corpus: list[str]) -> list[str]:
     """
-    Fit the CountVectorizer to the corpus and return the sorted vocabulary.
+    Fits the CountVectorizer to the corpus and return the sorted vocabulary.
     """
     vectorizer.fit(corpus)
     return vectorizer.get_feature_names_out().tolist()
@@ -254,21 +223,122 @@ def text_to_vector(text: str, vocabulary: list[str] | None = None) -> list[float
 
 # Distance metric
 def euclidean_distance(v1: list[float], v2: list[float]) -> float:
-    return math.sqrt(
-        sum((a - b) ** 2 for a, b in zip(v1, v2))
-    )  # TODO further understanding
+    return math.sqrt(sum((a - b) ** 2 for a, b in zip(v1, v2)))
+
+
+def normalise_vector(vector: list[float]) -> list[float]:
+    """
+    Project a detector candidate onto the unit hypersphere.
+
+    This ensures detector vectors and text vectors occupy
+    comparable L2-normalised feature space.
+    """
+
+    magnitude = math.sqrt(sum(value * value for value in vector))
+
+    if magnitude == 0:
+        return vector
+
+    return [value / magnitude for value in vector]
+
+
+# Data classes
+@dataclass
+class Detector:
+    """
+    A single NSA detector.
+
+    Represents a point in feature-vector space that lies OUTSIDE the self
+    region. Any input whose distance to this detector is <= radius triggers
+    a match (anomaly signal).
+    """
+
+    detector_id: int
+    vector: list[float]
+    radius: float
+    minimum_self_distance: float
+
+    def distance_to(
+        self,
+        feature_vector: list[float],
+    ) -> float:
+
+        return euclidean_distance(
+            self.vector,
+            feature_vector,
+        )
+
+    def matches(self, feature_vector: list[float]) -> float | None:
+        """
+        Return the Euclidean distance if this detector matches the vector,
+        otherwise return None.
+        """
+        dist = euclidean_distance(self.vector, feature_vector)
+        return dist if dist <= self.radius else None
+
+
+@dataclass
+class NSAResult:
+    """Per-record output returned to the API layer."""
+
+    """ id: int
+    original_text: str
+    cleaned_text: str
+    tokens: list[str]
+    nsa_status: str  # "Valid" | "Suspicious"
+    anomaly_score: int  # 0–100
+    anomaly_reason: str """
+    id: int
+    original_text: str
+    cleaned_text: str
+    tokens: list[str]
+    classification: str
+    anomaly_score: float
+    nearest_self_distance: float | None
+    nearest_detector_distance: float | None
+    matched_detector_id: int | None
+    detector_radius: float
+    detector_margin: float | None
+    vocabulary_coverage: float
+    out_of_vocabulary_ratio: float
+    classification_reason: str
+
+
+@dataclass
+class TrainingStatistics:
+    requested_detectors: int
+    generated_detectors: int
+    generation_attempts: int
+    detector_acceptance_rate: float
+    vocabulary_size: int
+    self_corpus_size: int
+    training_time_ms: float
+    corpus_hash: str
+
+
+@dataclass
+class NSAResponse:
+    """Aggregate response returned by the analyse() entry point."""
+
+    total_records: int
+    self_records: int
+    non_self_records: int
+    oov_records: int
+    results: list[NSAResult]
+    training_statistics: TrainingStatistics
 
 
 # Core NSA class
 
+
 class NegativeSelectionAlgorithm:
     def __init__(
         self,
-        detector_count: int = 50,
-        detector_radius: float = 0.55,
-        self_match_threshold: float = 0.40,
-        max_attempts: int = 5000,
-        random_seed: int = 90,
+        detector_count: int = NSA_DEFAULT_DETECTOR_COUNT,
+        detector_radius: float = NSA_DEFAULT_DETECTOR_RADIUS,
+        self_match_threshold: float = NSA_DEFAULT_SELF_MATCH_THRESHOLD,
+        max_attempts: int = NSA_DEFAULT_MAX_ATTEMPTS,
+        random_seed: int = NSA_DEFAULT_RANDOM_SEED,
     ) -> None:
         self.detector_count = detector_count
         self.detector_radius = detector_radius
@@ -280,32 +350,61 @@ class NegativeSelectionAlgorithm:
         self.self_vectors: list[list[float]] = []
         self.detectors: list[Detector] = []
 
-        import random as _rnd
-
         self._rnd = _rnd.Random(random_seed)
 
     # Training phase
 
     def train(self, normal_corpus: list[str]) -> None:
-        # Step 1 — vocabulary from normal samples
+        started = time.perf_counter()  # noqa: F821
+
+        # vocabulary from normal samples
         self.vocabulary = build_vocabulary(normal_corpus)
 
-        # Step 2 — vectorise normal samples -> self space
-        self.self_vectors = [
-            text_to_vector(text, self.vocabulary) for text in normal_corpus
-        ]
+        # vectorise normal samples -> self space
+        self.self_vectors = [text_to_vector(text) for text in normal_corpus]
 
-        # Step 3 — generate detectors
-        self._generate_detectors()
+        # generate detectors
+        attempts = self._generate_detectors()
+
+        elapsed_ms = (time.perf_counter() - started) * 1000  # noqa: F821
+
+        generated = len(self.detectors)
+
+        acceptance_rate = generated / attempts if attempts > 0 else 0.0
+
+        self.training_statistics = TrainingStatistics(
+            requested_detectors=self.detector_count,
+            generated_detectors=generated,
+            generation_attempts=attempts,
+            detector_acceptance_rate=round(
+                acceptance_rate,
+                6,
+            ),
+            vocabulary_size=len(self.vocabulary),
+            self_corpus_size=len(normal_corpus),
+            training_time_ms=round(
+                elapsed_ms,
+                3,
+            ),
+            corpus_hash=corpus_hash(normal_corpus),
+        )
+
+    def _generate_candidate(
+        self,
+    ) -> list[float]:
+
+        candidate = [self._rnd.random() for _ in range(len(self.vocabulary))]
+
+        return normalise_vector(candidate)
 
     def _generate_detectors(self) -> None:
         """
         Accept a candidate only if its minimum distance to every self vector
-        exceeds self_match_threshold (checking if it does NOT match self).
+        exceeds/is more than the self_match_threshold (checking if it does NOT match self).
         """
-        dimensions = len(self.vocabulary)
+        """ dimensions = len(self.vocabulary)
         if dimensions == 0:
-            return
+            return """
 
         self.detectors = []
         attempts = 0
@@ -315,100 +414,69 @@ class NegativeSelectionAlgorithm:
         ):
             attempts += 1
 
-            # Sample a random candidate in the unit hypercube
-            candidate = [self._rnd.random() for _ in range(dimensions)]
+            # candidate = self._random_unit_vector(dimensions)
+            candidate = self._generate_candidate()
 
             # Check candidate does not overlap with ANY self vector
-            min_dist_to_self = min(
-                euclidean_distance(candidate, sv) for sv in self.self_vectors
+            minimum_self_distance = min(
+                euclidean_distance(
+                    candidate,
+                    self_vector,
+                )
+                for self_vector in self.self_vectors
             )
 
-            if min_dist_to_self > self.self_match_threshold:
-                # Candidate is in non-self space -> accept as detector
-                detector = Detector(
-                    detector_id=len(self.detectors) + 1,
-                    vector=candidate,
-                    radius=self.detector_radius,
-                )
-                self.detectors.append(detector)
-                with get_cursor(commit=True) as cur:
-                    cur.execute(
-                        """
-                        INSERT INTO nsa_detectors
-                        (
-                            detector_vector,
-                            radius,
-                            threshold,
-                            detector_version
-                        )
-                        VALUES (%s,%s,%s,%s)
-                        """,
-                        (
-                            json.dumps(candidate),
-                            self.detector_radius,
-                            self.self_match_threshold,
-                            "NSA_V1",
-                        ),
-                    )
+            if minimum_self_distance <= self.self_match_threshold:
+                continue
+
+            detector = Detector(
+                detector_id=(len(self.detectors) + 1),
+                vector=candidate,
+                radius=self.detector_radius,
+                minimum_self_distance=(minimum_self_distance),
+            )
+
+            self.detectors.append(detector)
+
+        return attempts
+
+    # Vocabulary analysis
+    def _vocabulary_statistics(
+        self,
+        text: str,
+    ) -> tuple[float, float]:
+
+        raw_tokens = [
+            lemmatise_token(token)
+            for token in preprocess(text).split()
+            if token.isalpha() and len(token) >= 2
+        ]
+
+        if not raw_tokens:
+            return 0.0, 1.0
+
+        vocabulary_set = set(self.vocabulary)
+
+        recognised = sum(1 for token in raw_tokens if token in vocabulary_set)
+
+        coverage = recognised / len(raw_tokens)
+
+        return (
+            round(coverage, 4),
+            round(1 - coverage, 4),
+        )
 
     # Detection phase
-
-    def detect_oneold(self, text: str, record_id: int) -> NSAResult:
-        """
-        Runs a single feedback string through the detection pipeline.
-        Returns an NSAResult with status, score and reason.
-        """
-        cleaned = preprocess(text)
-        tokens = tokenise(text)
-        feature_vector = text_to_vector(text, self.vocabulary)
-
-        # Check against all detectors; collect matching distances
-        matched_distances: list[float] = []
-        for detector in self.detectors:
-            dist = detector.matches(feature_vector)
-            if dist is not None:
-                matched_distances.append(dist)
-
-        if matched_distances:
-            closest = min(matched_distances)
-            # Score: closer to detector centre -> higher anomaly score
-            raw_score = max(0.0, 1.0 - closest)
-            anomaly_score = round(raw_score * 100)
-            return NSAResult(
-                id=record_id,
-                original_text=text,
-                cleaned_text=cleaned,
-                tokens=tokens,
-                nsa_status="Suspicious",
-                anomaly_score=anomaly_score,
-                anomaly_reason="Matched NSA detector — pattern deviates from normal feedback",
-            )
-
-        if all(v == 0.0 for v in feature_vector):
-            return NSAResult(
-                id=record_id,
-                original_text=text,
-                cleaned_text=cleaned,
-                tokens=tokens,
-                nsa_status="Suspicious",
-                anomaly_score=85,
-                anomaly_reason="No known vocabulary tokens — likely gibberish or bot text",
-            )
-
-        return NSAResult(
-            id=record_id,
-            original_text=text,
-            cleaned_text=cleaned,
-            tokens=tokens,
-            nsa_status="Valid",
-            anomaly_score=0,
-            anomaly_reason="No detector match",
-        )
 
     def detect_one(self, text: str, record_id: int) -> NSAResult:
         cleaned = preprocess(text)
         tokens = tokenise(text)
-        feature_vector = text_to_vector(text, self.vocabulary)
+        feature_vector = text_to_vector(text)
+
+        (
+            vocabulary_coverage,
+            oov_ratio,
+        ) = self._vocabulary_statistics(text)
 
         # Handle empty/OOV text before checking detectors
         if all(value == 0.0 for value in feature_vector):
@@ -417,189 +485,144 @@ class NegativeSelectionAlgorithm:
                 original_text=text,
                 cleaned_text=cleaned,
                 tokens=tokens,
-                nsa_status="Suspicious",
-                anomaly_score=100,
-                anomaly_reason=(
-                    "No recognised vocabulary tokens from the normal training corpus"
+                classification="OOV",
+                anomaly_score=1.0,
+                nearest_self_distance=None,
+                nearest_detector_distance=None,
+                matched_detector_id=None,
+                detector_radius=(self.detector_radius),
+                detector_margin=None,
+                vocabulary_coverage=(vocabulary_coverage),
+                out_of_vocabulary_ratio=(oov_ratio),
+                classification_reason=(
+                    "No recognised tokens exist " "in the SELF vocabulary."
                 ),
             )
 
         # Distance to the closest normal/self example
-        closest_self_distance = min(
+        nearest_self_distance = min(
             euclidean_distance(feature_vector, self_vector)
             for self_vector in self.self_vectors
         )
 
         # Detector distances
-        detector_distances = [
+        """ detector_distances = [
             euclidean_distance(feature_vector, detector.vector)
             for detector in self.detectors
-        ]
+        ] """
 
-        closest_detector_distance = min(detector_distances)
+        nearest_detector = min(
+            self.detectors,
+            key=lambda detector: detector.distance_to(feature_vector),
+        )
+
+        nearest_detector_distance = nearest_detector.distance_to(feature_vector)
+
+        detector_margin = self.detector_radius - nearest_detector_distance
 
         # A detector matches when the input falls within its radius
-        detector_matched = closest_detector_distance <= self.detector_radius
+        detector_matched = nearest_detector_distance <= self.detector_radius
 
         if detector_matched:
-            # 100 at detector centre, approaching 50 near radius boundary
-            detector_strength = max(
+            detector_ratio = nearest_detector_distance / self.detector_radius
+
+            anomaly_score = max(
                 0.0,
-                1.0 - (closest_detector_distance / self.detector_radius),
+                min(
+                    1.0,
+                    1.0 - detector_ratio,
+                ),
             )
-
-            # Include distance from normal/self feedback
-            self_deviation = min(
-                1.0,
-                closest_self_distance / math.sqrt(2),
-            )
-
-            combined_score = detector_strength * 0.6 + self_deviation * 0.4
-
-            anomaly_score = max(51, round(combined_score * 100))
 
             return NSAResult(
                 id=record_id,
                 original_text=text,
                 cleaned_text=cleaned,
                 tokens=tokens,
-                nsa_status="Suspicious",
-                anomaly_score=anomaly_score,
-                anomaly_reason=(
-                    "Matched an NSA detector and deviates from normal feedback"
+                classification="NON_SELF",
+                anomaly_score=round(
+                    anomaly_score,
+                    4,
+                ),
+                nearest_self_distance=round(
+                    nearest_self_distance,
+                    6,
+                ),
+                nearest_detector_distance=round(
+                    nearest_detector_distance,
+                    6,
+                ),
+                matched_detector_id=(nearest_detector.detector_id),
+                detector_radius=(self.detector_radius),
+                detector_margin=round(
+                    detector_margin,
+                    6,
+                ),
+                vocabulary_coverage=(vocabulary_coverage),
+                out_of_vocabulary_ratio=(oov_ratio),
+                classification_reason=(
+                    "Input fell within the " "matching radius of an " "NSA detector."
                 ),
             )
 
         # Variable score for valid feedback based on distance from self-space
-        normalised_self_distance = min(
-            1.0,
-            closest_self_distance / math.sqrt(2),
-        )
-
-        anomaly_score = min(
-            50,
-            round(normalised_self_distance * 50),
-        )
 
         return NSAResult(
             id=record_id,
             original_text=text,
             cleaned_text=cleaned,
             tokens=tokens,
-            nsa_status="Valid",
-            anomaly_score=anomaly_score,
-            anomaly_reason="No detector match; score reflects distance from normal feedback",
+            classification="SELF",
+            anomaly_score=0.0,
+            nearest_self_distance=round(
+                nearest_self_distance,
+                6,
+            ),
+            nearest_detector_distance=round(
+                nearest_detector_distance,
+                6,
+            ),
+            matched_detector_id=None,
+            detector_radius=(self.detector_radius),
+            detector_margin=round(
+                detector_margin,
+                6,
+            ),
+            vocabulary_coverage=(vocabulary_coverage),
+            out_of_vocabulary_ratio=(oov_ratio),
+            classification_reason=(
+                "Input did not match any " "generated NSA detector."
+            ),
         )
 
     def detect_batch(self, feedback_list: list[str]) -> NSAResponse:
 
-        results = []
-
-        with get_cursor(commit=True) as cur:
-
-            cur.execute(
-                """
-                INSERT INTO datasets
-                (
-                    source_name,
-                    source_type,
-                    total_records
-                )
-                VALUES
-                (
-                    %s,
-                    %s,
-                    %s
-                )
-                RETURNING dataset_id
-                """,
-                (
-                    "Runtime Feedback Dataset",
-                    "API",
-                    len(feedback_list),
-                ),
+        results = [
+            self.detect_one(
+                text,
+                index + 1,
             )
+            for index, text in enumerate(feedback_list)
+        ]
 
-            dataset = cur.fetchone()
-            dataset_id = dataset["dataset_id"]
+        self_count = sum(result.classification == "SELF" for result in results)
 
-        for idx, text in enumerate(feedback_list):
+        non_self_count = sum(result.classification == "NON_SELF" for result in results)
 
-            result = self.detect_one(text, idx + 1)
+        oov_count = sum(result.classification == "OOV" for result in results)
 
-            with get_cursor(commit=True) as cur:
-
-                cur.execute(
-                    """
-                    INSERT INTO feedback_records
-                    (
-                        dataset_id,
-                        raw_text,
-                        cleaned_text,
-                        tokens,
-                        preprocessing_complete,
-                        is_valid,
-                        is_anomalous
-                    )
-                    VALUES
-                    (
-                        %s,%s,%s,%s,%s,%s,%s
-                    )
-                    RETURNING feedback_id
-                    """,
-                    (
-                        dataset_id,
-                        result.original_text,
-                        result.cleaned_text,
-                        json.dumps(result.tokens),
-                        True,
-                        result.nsa_status == "Valid",
-                        result.nsa_status == "Suspicious",
-                    ),
-                )
-
-                feedback = cur.fetchone()
-
-                cur.execute(
-                    """
-                    INSERT INTO anomaly_results
-                    (
-                        feedback_id,
-                        is_anomalous,
-                        anomaly_score,
-                        anomaly_reason
-                    )
-                    VALUES
-                    (
-                        %s,%s,%s,%s
-                    )
-                    """,
-                    (
-                        feedback["feedback_id"],
-                        result.nsa_status == "Suspicious",
-                        result.anomaly_score,
-                        result.anomaly_reason,
-                    ),
-                )
-
-            results.append(result)
-            suspicious = sum(1 for r in results if r.nsa_status == "Suspicious")
-            valid = len(results) - suspicious
+        if self.training_statistics is None:
+            raise RuntimeError("NSA must be trained before " "running detection.")
 
         return NSAResponse(
             total_records=len(results),
-            valid_records=valid,
-            suspicious_records=suspicious,
+            self_records=self_count,
+            non_self_records=(non_self_count),
+            oov_records=oov_count,
             results=results,
+            training_statistics=(self.training_statistics),
         )
 
-
-# Module-level cache (trained once per unique config entry)
-
-# Preset NSA parameters
-NSA_DEFAULT_DETECTOR_COUNT: int = 200
-NSA_DEFAULT_DETECTOR_RADIUS: float = 0.40
-NSA_DEFAULT_SELF_MATCH_THRESHOLD: float = 0.75
 
 # Cache: (detector_count, detector_radius, self_match_threshold) -> instance
 _nsa_cache: dict[tuple, NegativeSelectionAlgorithm] = {}
@@ -609,29 +632,37 @@ def get_nsa(
     detector_count: int = NSA_DEFAULT_DETECTOR_COUNT,
     detector_radius: float = NSA_DEFAULT_DETECTOR_RADIUS,
     self_match_threshold: float = NSA_DEFAULT_SELF_MATCH_THRESHOLD,
+    max_attempts: int = NSA_DEFAULT_MAX_ATTEMPTS,
+    random_seed: int = NSA_DEFAULT_RANDOM_SEED,
 ) -> NegativeSelectionAlgorithm:
     """
     Return a trained NSA instance for the given parameters.
     Instances are cached by (detector_count, detector_radius, self_match_threshold)
     so a re-train is only triggered when the config actually changes.
     """
+    normal_corpus = load_normal_corpus_from_db()
+
+    training_corpus_hash = corpus_hash(normal_corpus)
+
     cache_key = (
+        training_corpus_hash,
         detector_count,
-        round(detector_radius, 4),
-        round(self_match_threshold, 4),
+        round(detector_radius, 6),
+        round(self_match_threshold, 6),
+        max_attempts,
+        random_seed,
     )
 
     if cache_key not in _nsa_cache:
-        normal_corpus = load_normal_corpus_from_db()
-
-        instance = NegativeSelectionAlgorithm(
+        nsa = NegativeSelectionAlgorithm(
             detector_count=detector_count,
             detector_radius=detector_radius,
-            self_match_threshold=self_match_threshold,
-            max_attempts=10000,
-            random_seed=42,
+            self_match_threshold=(self_match_threshold),
+            max_attempts=max_attempts,
+            random_seed=random_seed,
         )
-        instance.train(normal_corpus)
-        _nsa_cache[cache_key] = instance
+
+        nsa.train(normal_corpus)
+        _nsa_cache[cache_key] = nsa  
 
     return _nsa_cache[cache_key]

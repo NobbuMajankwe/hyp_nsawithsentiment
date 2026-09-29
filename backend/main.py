@@ -1,27 +1,11 @@
-import hashlib
-import json
+from __future__ import annotations
+
+# import hashlib
+import csv
+import io
 import logging
-from fastapi import (
-    APIRouter,
-    Depends,
-    FastAPI,
-    HTTPException,
-    status,
-    UploadFile,
-    File,
-    Form,
-)
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import BaseModel
 from typing import Literal
-from nsa import (
-    get_nsa,
-    NSAResult,
-    NSA_DEFAULT_DETECTOR_COUNT,
-    NSA_DEFAULT_DETECTOR_RADIUS,
-    NSA_DEFAULT_SELF_MATCH_THRESHOLD,
-)
+
 from auth import (
     authenticate_user,
     create_access_token,
@@ -30,199 +14,63 @@ from auth import (
     get_user_by_id,
     reset_user_password,
 )
-from database import init_db, get_cursor
-from sentiment import classify_sentiment
+from database import get_cursor, init_db
 from dataset_handler import (
-    parse_csv_file,
-    parse_json_file,
-    save_dataset_to_db,
-    get_user_datasets,
+    DatasetParseError,
+    delete_dataset,
     get_dataset_by_id,
     get_dataset_feedback,
-    delete_dataset,
-    DatasetParseError,
+    get_user_datasets,
+    parse_csv_file,
+    parse_json_file,
+    parse_labelled_csv_file,
+    save_dataset_to_db,
 )
+from experiment_service import (
+    get_experiment,
+    get_experiment_results,
+    list_experiments,
+    run_experiment,
+)
+from fastapi import (
+    APIRouter,
+    Depends,
+    FastAPI,
+    File,
+    Form,
+    HTTPException,
+    UploadFile,
+    status,
+)
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from nsa import (
+    NSA_DEFAULT_DETECTOR_COUNT,
+    NSA_DEFAULT_DETECTOR_RADIUS,
+    NSA_DEFAULT_MAX_ATTEMPTS,
+    NSA_DEFAULT_RANDOM_SEED,
+    NSA_DEFAULT_SELF_MATCH_THRESHOLD,
+)
+from pydantic import BaseModel
 
+# from sentiment import classify_sentiment
 
 logger = logging.getLogger(__name__)
 
-
-def _feedback_hash(feedback: list[str]) -> str:
-    canonical = "\n".join(sorted(line.strip() for line in feedback if line.strip()))
-    return hashlib.sha256(canonical.encode()).hexdigest()
-
-
-def _load_cached_session(user_id: int, input_hash: str) -> dict | None:
-    with get_cursor() as cur:
-        cur.execute(
-            "SELECT * FROM nsa_sessions WHERE user_id = %s AND input_hash = %s LIMIT 1",
-            (user_id, input_hash),
-        )
-        session = cur.fetchone()
-        if not session:
-            return None
-
-        cur.execute(
-            "SELECT * FROM nsa_session_results WHERE session_id = %s ORDER BY record_index",
-            (session["session_id"],),
-        )
-        rows = cur.fetchall()
-
-    results = [
-        {
-            "id": r["record_index"],
-            "originalText": r["original_text"],
-            "cleanedText": r["cleaned_text"],
-            "tokens": r["tokens"],
-            "nsaStatus": r["nsa_status"],
-            "anomalyScore": r["anomaly_score"],
-            "anomalyReason": r["anomaly_reason"],
-        }
-        for r in rows
-    ]
-    return {
-        "totalRecords": session["total_records"],
-        "validRecords": session["valid_records"],
-        "suspiciousRecords": session["suspicious_records"],
-        "results": results,
-        "cached": True,
-    }
-
-
-def _save_session(user_id: int, input_hash: str, response: "AnalyseResponse") -> None:
-    with get_cursor(commit=True) as cur:
-        cur.execute(
-            """
-            INSERT INTO nsa_sessions (user_id, input_hash, total_records, valid_records, suspicious_records)
-            VALUES (%s, %s, %s, %s, %s)
-            ON CONFLICT (user_id, input_hash)
-            DO UPDATE SET
-                total_records      = EXCLUDED.total_records,
-                valid_records      = EXCLUDED.valid_records,
-                suspicious_records = EXCLUDED.suspicious_records,
-                created_at         = CURRENT_TIMESTAMP
-            RETURNING session_id
-            """,
-            (
-                user_id,
-                input_hash,
-                response.totalRecords,
-                response.validRecords,
-                response.suspiciousRecords,
-            ),
-        )
-        session_id = cur.fetchone()["session_id"]
-
-        cur.execute(
-            "DELETE FROM nsa_session_results WHERE session_id = %s", (session_id,)
-        )
-        for item in response.results:
-            cur.execute(
-                """
-                INSERT INTO nsa_session_results
-                    (session_id, record_index, original_text, cleaned_text,
-                     tokens, nsa_status, anomaly_score, anomaly_reason)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                """,
-                (
-                    session_id,
-                    item.id,
-                    item.originalText,
-                    item.cleanedText,
-                    json.dumps(item.tokens),
-                    item.nsaStatus,
-                    item.anomalyScore,
-                    item.anomalyReason,
-                ),
-            )
-
-
-def _load_nsa_config(user_id: int) -> dict:
-    with get_cursor() as cur:
-        cur.execute(
-            """
-            SELECT nsa_detector_count, nsa_threshold, nsa_api_url
-            FROM integration_settings
-            WHERE user_id = %s
-            """,
-            (user_id,),
-        )
-        row = cur.fetchone()
-
-    if row:
-        return {
-            "detectorCount": row["nsa_detector_count"] or NSA_DEFAULT_DETECTOR_COUNT,
-            "detectorRadius": (
-                float(row["nsa_threshold"])
-                if row["nsa_threshold"] is not None
-                else NSA_DEFAULT_DETECTOR_RADIUS
-            ),
-            "selfMatchThreshold": NSA_DEFAULT_SELF_MATCH_THRESHOLD,
-            "apiUrl": row["nsa_api_url"],
-        }
-    return {
-        "detectorCount": NSA_DEFAULT_DETECTOR_COUNT,
-        "detectorRadius": NSA_DEFAULT_DETECTOR_RADIUS,
-        "selfMatchThreshold": NSA_DEFAULT_SELF_MATCH_THRESHOLD,
-        "apiUrl": None,
-    }
-
-
-def _save_nsa_config(user_id: int, config: dict) -> None:
-    with get_cursor(commit=True) as cur:
-        cur.execute(
-            """
-            INSERT INTO integration_settings (user_id, nsa_detector_count, nsa_threshold, nsa_api_url)
-            VALUES (%s, %s, %s, %s)
-            ON CONFLICT (user_id) DO UPDATE SET
-                nsa_detector_count = COALESCE(EXCLUDED.nsa_detector_count, integration_settings.nsa_detector_count),
-                nsa_threshold      = COALESCE(EXCLUDED.nsa_threshold,       integration_settings.nsa_threshold),
-                nsa_api_url        = COALESCE(EXCLUDED.nsa_api_url,         integration_settings.nsa_api_url),
-                updated_at         = CURRENT_TIMESTAMP
-            """,
-            (
-                user_id,
-                config.get("detectorCount"),
-                config.get("detectorRadius"),
-                config.get("apiUrl"),
-            ),
-        )
-
-
 app = FastAPI(
-    title="EventSense AI",
-    description="NSA anomaly detection with JWT authentication.",
-    version="0.3.0",
+    title="NSA Research Platform: EventSense AI",
+    description=(
+        "Experimental/Research based Negative Selection Algorithm platform "
+        "for detecting non-self observations in event feedback."
+    ),
+    version="1.0.0",
 )
-
-auth_router = APIRouter(
-    prefix="/api/auth",
-    tags=["Authentication"],
-)
-datasets_router = APIRouter(
-    prefix="/api/datasets",
-    tags=["Datasets"],
-)
-nsa_router = APIRouter(
-    prefix="/api/nsa",
-    tags=["NSA Analysis"],
-)
-
-sentiment_router = APIRouter(
-    prefix="/api/sentiment",
-    tags=["Sentiment Analysis"],
-)
-
-
-@app.on_event("startup")
-def on_startup() -> None:
-    init_db()
-
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
+        "http://localhost:5174",
         "http://127.0.0.1:5173",
         "http://localhost:3000",
         "http://localhost:3001",
@@ -232,11 +80,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.on_event("startup")
+def on_startup() -> None:
+    init_db()
+
+    logger.info("NSA Research Platform started.")
+
+
 bearer_scheme = HTTPBearer()
 
 
 def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),  # noqa: B008
 ) -> dict:
     payload = decode_access_token(credentials.credentials)
     if payload is None:
@@ -246,6 +102,24 @@ def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
     return payload
+
+
+auth_router = APIRouter(
+    prefix="/api/auth",
+    tags=["Authentication"],
+)
+datasets_router = APIRouter(
+    prefix="/api/datasets",
+    tags=["Research Datasets"],
+)
+experiments_router = APIRouter(
+    prefix="/api/experiments",
+    tags=["NSA Experiments"],
+)
+nsa_router = APIRouter(
+    prefix="/api/nsa",
+    tags=["NSA Configuration"],
+)
 
 
 class RegisterRequest(BaseModel):
@@ -277,53 +151,14 @@ class ResetPasswordRequest(BaseModel):
     newPassword: str
 
 
-class NsaConfigResponse(BaseModel):
-    detectorCount: int
-    detectorRadius: float
-    selfMatchThreshold: float
-    apiUrl: str | None
-
-
-class NsaConfigRequest(BaseModel):
-    detectorCount: int | None = None
-    detectorRadius: float | None = None
-    selfMatchThreshold: float | None = None
-    apiUrl: str | None = None
-
-
-class AnalyseRequest(BaseModel):
-    feedback: list[str]
-    detectorCount: int | None = None
-    detectorRadius: float | None = None
-    selfMatchThreshold: float | None = None
-
-
-class ResultItem(BaseModel):
-    id: int
-    originalText: str
-    cleanedText: str
-    tokens: list[str]
-    nsaStatus: str
-    anomalyScore: int
-    anomalyReason: str
-
-
-class AnalyseResponse(BaseModel):
-    totalRecords: int
-    validRecords: int
-    suspiciousRecords: int
-    results: list[ResultItem]
-    cached: bool = False
-
-
 class DatasetInfo(BaseModel):
     id: int
     name: str
     type: str
-    description: str | None
+    description: str | None = None
     totalRecords: int
     status: str
-    uploadedAt: str | None
+    uploadedAt: str | None = None
 
 
 class DatasetListResponse(BaseModel):
@@ -346,8 +181,8 @@ class FeedbackRecord(BaseModel):
     id: int
     text: str
     cleanedText: str | None
-    isValid: bool
-    isAnomalous: bool
+    isValid: bool | None = None
+    isAnomalous: bool | None = None
     createdAt: str | None
 
 
@@ -357,36 +192,48 @@ class DatasetFeedbackResponse(BaseModel):
     records: list[FeedbackRecord]
 
 
-class SentimentRequest(BaseModel):
-    texts: list[str]
+class NsaConfigResponse(BaseModel):
+
+    detectorCount: int
+    detectorRadius: float
+
+    selfMatchThreshold: float
+
+    maxAttempts: int
+
+    randomSeed: int
 
 
-class SentimentItem(BaseModel):
-    id: int
-    originalText: str
-    label: str  # "Positive" | "Negative" | "Neutral"
-    confidence: float  # 0–100
-    model: str  # which classifier was used
+class NsaConfigRequest(BaseModel):
+
+    detectorCount: int | None = None
+
+    detectorRadius: float | None = None
+
+    selfMatchThreshold: float | None = None
+
+    maxAttempts: int | None = None
+
+    randomSeed: int | None = None
 
 
-class SentimentResponse(BaseModel):
-    totalRecords: int
-    positiveCount: int
-    negativeCount: int
-    neutralCount: int
-    results: list[SentimentItem]
+class RunExperimentRequest(BaseModel):
 
+    datasetId: int
 
-def _to_result_item(r: NSAResult) -> ResultItem:
-    return ResultItem(
-        id=r.id,
-        originalText=r.original_text,
-        cleanedText=r.cleaned_text,
-        tokens=r.tokens,
-        nsaStatus=r.nsa_status,
-        anomalyScore=r.anomaly_score,
-        anomalyReason=r.anomaly_reason,
-    )
+    experimentName: str
+
+    experimentDescription: str | None = None
+
+    detectorCount: int = NSA_DEFAULT_DETECTOR_COUNT
+
+    detectorRadius: float = NSA_DEFAULT_DETECTOR_RADIUS
+
+    selfMatchThreshold: float = NSA_DEFAULT_SELF_MATCH_THRESHOLD
+
+    maxAttempts: int = NSA_DEFAULT_MAX_ATTEMPTS
+
+    randomSeed: int = NSA_DEFAULT_RANDOM_SEED
 
 
 @app.get("/")
@@ -443,7 +290,7 @@ def login(body: LoginRequest):
 
 
 @auth_router.get("/me", response_model=UserOut)
-def me(current_user: dict = Depends(get_current_user)):
+def me(current_user: dict = Depends(get_current_user)):  # noqa: B008
     user = get_user_by_id(current_user["sub"])
 
     if not user:
@@ -478,83 +325,142 @@ def reset_password(body: ResetPasswordRequest):
     }
 
 
-@nsa_router.get("/latest-valid")
-def get_latest_valid_records(current_user: dict = Depends(get_current_user)):
-
-    user_id = current_user["sub"]
+# nsa
+def _load_nsa_config(
+    user_id: int,
+) -> dict:
 
     with get_cursor() as cur:
+
         cur.execute(
             """
-            SELECT session_id, created_at, total_records, valid_records, suspicious_records
-            FROM nsa_sessions
+            SELECT
+                nsa_detector_count,
+                nsa_detector_radius,
+                nsa_self_match_threshold,
+                nsa_max_attempts,
+                nsa_random_seed
+
+            FROM integration_settings
+
             WHERE user_id = %s
-            ORDER BY created_at DESC
-            LIMIT 1
             """,
             (user_id,),
         )
-        session = cur.fetchone()
 
-        if not session:
-            return {"found": False, "records": [], "sessionInfo": None}
+        row = cur.fetchone()
 
-        cur.execute(
-            """
-            SELECT record_index, original_text, nsa_status
-            FROM nsa_session_results
-            WHERE session_id = %s AND nsa_status = 'Valid'
-            ORDER BY record_index
-            """,
-            (session["session_id"],),
-        )
-        rows = cur.fetchall()
+    if not row:
+
+        return {
+            "detectorCount": NSA_DEFAULT_DETECTOR_COUNT,
+            "detectorRadius": NSA_DEFAULT_DETECTOR_RADIUS,
+            "selfMatchThreshold": NSA_DEFAULT_SELF_MATCH_THRESHOLD,
+            "maxAttempts": NSA_DEFAULT_MAX_ATTEMPTS,
+            "randomSeed": NSA_DEFAULT_RANDOM_SEED,
+        }
 
     return {
-        "found": True,
-        "sessionInfo": {
-            "totalRecords": session["total_records"],
-            "validRecords": session["valid_records"],
-            "suspiciousRecords": session["suspicious_records"],
-            "createdAt": (
-                session["created_at"].isoformat() if session["created_at"] else None
-            ),
-        },
-        "records": [
-            {"id": r["record_index"], "text": r["original_text"]} for r in rows
-        ],
+        "detectorCount": row["nsa_detector_count"] or NSA_DEFAULT_DETECTOR_COUNT,
+        "detectorRadius": float(
+            row["nsa_detector_radius"] or NSA_DEFAULT_DETECTOR_RADIUS
+        ),
+        "selfMatchThreshold": float(
+            row["nsa_self_match_threshold"] or NSA_DEFAULT_SELF_MATCH_THRESHOLD
+        ),
+        "maxAttempts": row["nsa_max_attempts"] or NSA_DEFAULT_MAX_ATTEMPTS,
+        "randomSeed": (
+            row["nsa_random_seed"]
+            if row["nsa_random_seed"] is not None
+            else NSA_DEFAULT_RANDOM_SEED
+        ),
     }
 
 
-@nsa_router.get("/config", response_model=NsaConfigResponse)
-def get_nsa_config(current_user: dict = Depends(get_current_user)):
-    return _load_nsa_config(current_user["sub"])
+def _save_nsa_config(
+    user_id: int,
+    config: dict,
+) -> None:
+
+    with get_cursor(commit=True) as cur:
+
+        cur.execute(
+            """
+            INSERT INTO integration_settings
+            (
+                user_id,
+
+                nsa_detector_count,
+                nsa_detector_radius,
+                nsa_self_match_threshold,
+
+                nsa_max_attempts,
+                nsa_random_seed
+            )
+
+            VALUES
+            (
+                %s,%s,%s,%s,%s,%s
+            )
+
+            ON CONFLICT (user_id)
+
+            DO UPDATE SET
+
+                nsa_detector_count =
+                    EXCLUDED.nsa_detector_count,
+
+                nsa_detector_radius =
+                    EXCLUDED.nsa_detector_radius,
+
+                nsa_self_match_threshold =
+                    EXCLUDED.nsa_self_match_threshold,
+
+                nsa_max_attempts =
+                    EXCLUDED.nsa_max_attempts,
+
+                nsa_random_seed =
+                    EXCLUDED.nsa_random_seed,
+
+                updated_at =
+                    CURRENT_TIMESTAMP
+            """,
+            (
+                user_id,
+                config["detectorCount"],
+                config["detectorRadius"],
+                config["selfMatchThreshold"],
+                config["maxAttempts"],
+                config["randomSeed"],
+            ),
+        )
 
 
-@nsa_router.put("/config", response_model=NsaConfigResponse)
+@nsa_router.get(
+    "/config",
+    response_model=NsaConfigResponse,
+)
+def get_nsa_config(
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+):
+
+    return _load_nsa_config(int(current_user["sub"]))
+
+
+@nsa_router.put(
+    "/config",
+    response_model=NsaConfigResponse,
+)
 def update_nsa_config(
     body: NsaConfigRequest,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),  # noqa: B008
 ):
-    user_id = current_user["sub"]
 
-    if body.detectorCount is not None and not (1 <= body.detectorCount <= 2000):
-        raise HTTPException(
-            status_code=422, detail="detectorCount must be between 1 and 2000."
-        )
-    if body.detectorRadius is not None and not (0.01 <= body.detectorRadius <= 1.0):
-        raise HTTPException(
-            status_code=422, detail="detectorRadius must be between 0.01 and 1.0."
-        )
-    if body.selfMatchThreshold is not None and not (
-        0.01 <= body.selfMatchThreshold <= 1.0
-    ):
-        raise HTTPException(
-            status_code=422, detail="selfMatchThreshold must be between 0.01 and 1.0."
-        )
+    user_id = int(current_user["sub"])
 
     current = _load_nsa_config(user_id)
-    merged = {
+
+    config = {
         "detectorCount": (
             body.detectorCount
             if body.detectorCount is not None
@@ -570,102 +476,270 @@ def update_nsa_config(
             if body.selfMatchThreshold is not None
             else current["selfMatchThreshold"]
         ),
-        "apiUrl": body.apiUrl if body.apiUrl is not None else current["apiUrl"],
+        "maxAttempts": (
+            body.maxAttempts if body.maxAttempts is not None else current["maxAttempts"]
+        ),
+        "randomSeed": (
+            body.randomSeed if body.randomSeed is not None else current["randomSeed"]
+        ),
     }
-    _save_nsa_config(user_id, merged)
-    return merged
 
+    # Validation
 
-@nsa_router.post("/analyse", response_model=AnalyseResponse)
-def analyse(
-    request: AnalyseRequest,
-    current_user: dict = Depends(get_current_user),
-):
+    if not (1 <= config["detectorCount"] <= 5000):
 
-    feedback = [line.strip() for line in request.feedback if line.strip()]
-    if not feedback:
-        raise HTTPException(status_code=422, detail="No feedback records provided.")
-
-    user_id = current_user["sub"]
-    input_hash = _feedback_hash(feedback)
-    saved_config = _load_nsa_config(user_id)
-    detector_count = (
-        request.detectorCount
-        if request.detectorCount is not None
-        else saved_config["detectorCount"]
-    )
-    detector_radius = (
-        request.detectorRadius
-        if request.detectorRadius is not None
-        else saved_config["detectorRadius"]
-    )
-    self_match_threshold = (
-        request.selfMatchThreshold
-        if request.selfMatchThreshold is not None
-        else saved_config["selfMatchThreshold"]
-    )
-    # Session reads are disabled until token JSON handling is finalised.
-    nsa = get_nsa(
-        detector_count=detector_count,
-        detector_radius=detector_radius,
-        self_match_threshold=self_match_threshold,
-    )
-    response_data = nsa.detect_batch(feedback)
-
-    result = AnalyseResponse(
-        totalRecords=response_data.total_records,
-        validRecords=response_data.valid_records,
-        suspiciousRecords=response_data.suspicious_records,
-        results=[_to_result_item(r) for r in response_data.results],
-        cached=False,
-    )
-
-    try:
-        _save_session(user_id, input_hash, result)
-    except Exception:
-        logger.exception("Could not cache NSA session")
-
-    return result
-
-
-@sentiment_router.post("/analyse", response_model=SentimentResponse)
-def sentiment_analyse(
-    request: SentimentRequest,
-    _current_user: dict = Depends(get_current_user),
-):
-    texts = [t.strip() for t in request.texts if t.strip()]
-    if not texts:
-        raise HTTPException(status_code=422, detail="No texts provided.")
-
-    classifications = classify_sentiment(texts)
-
-    results = [
-        SentimentItem(
-            id=idx + 1,
-            originalText=c.text,
-            label=c.label,
-            confidence=c.confidence,
-            model=c.model,
+        raise HTTPException(
+            status_code=422,
+            detail=("detectorCount must be " "between 1 and 5000."),
         )
-        for idx, c in enumerate(classifications)
-    ]
 
-    return SentimentResponse(
-        totalRecords=len(results),
-        positiveCount=sum(1 for r in results if r.label == "Positive"),
-        negativeCount=sum(1 for r in results if r.label == "Negative"),
-        neutralCount=sum(1 for r in results if r.label == "Neutral"),
-        results=results,
+    if not (0.001 <= config["detectorRadius"] <= 2.0):
+
+        raise HTTPException(
+            status_code=422,
+            detail=("detectorRadius must be " "between 0.001 and 2.0."),
+        )
+
+    if not (0.001 <= config["selfMatchThreshold"] <= 2.0):
+
+        raise HTTPException(
+            status_code=422,
+            detail=("selfMatchThreshold must " "be between 0.001 and 2.0."),
+        )
+
+    if not (1 <= config["maxAttempts"] <= 1_000_000):
+
+        raise HTTPException(
+            status_code=422,
+            detail=("maxAttempts must be " "between 1 and 1,000,000."),
+        )
+
+    _save_nsa_config(
+        user_id,
+        config,
     )
 
+    return config
 
-@datasets_router.post("/upload", status_code=201)
+
+# datasets
+@datasets_router.post(
+    "/upload",
+    status_code=201,
+)
 async def upload_dataset(
-    file: UploadFile = File(...),
+    file: UploadFile = File(...),  # noqa: B008
     name: str | None = Form(None),
     description: str | None = Form(None),
-    current_user: dict = Depends(get_current_user),
+    researchRole: Literal[
+        "SELF_CORPUS",
+        "EVALUATION",
+        "ANALYSIS",
+        "SUPPORT",
+    ] = Form("ANALYSIS"),
+    current_user: dict = Depends(get_current_user),  # noqa: B008
 ):
+
+    user_id = int(current_user["sub"])
+
+    if not file.filename:
+
+        raise HTTPException(
+            status_code=400,
+            detail="No file provided.",
+        )
+
+    filename = file.filename.lower()
+
+    if filename.endswith(".csv"):
+
+        source_type = "CSV"
+
+    elif filename.endswith(".json"):
+
+        source_type = "JSON"
+
+    else:
+
+        raise HTTPException(
+            status_code=400,
+            detail=("Only CSV and JSON " "files are supported."),
+        )
+
+    content = await file.read()
+
+    if len(content) > (100 * 1024 * 1024):
+
+        raise HTTPException(
+            status_code=413,
+            detail=("File too large. " "Maximum size is 100MB."),
+        )
+
+    try:
+
+        if source_type == "CSV":
+
+            feedback_texts = parse_csv_file(content)
+
+        else:
+
+            feedback_texts = parse_json_file(content)
+
+    except DatasetParseError as exc:
+
+        raise HTTPException(
+            status_code=422,
+            detail=str(exc),
+        ) from exc
+
+    dataset_name = name.strip() if name else file.filename
+
+    try:
+
+        dataset_id = save_dataset_to_db(
+            user_id=user_id,
+            source_name=dataset_name,
+            source_type=source_type,
+            feedback_texts=feedback_texts,
+            file_path=file.filename,
+            description=description,
+        )
+
+        # Research role is metadata,
+        # not file format information.
+
+        with get_cursor(commit=True) as cur:
+
+            cur.execute(
+                """
+                UPDATE datasets
+                SET research_role = %s
+                WHERE dataset_id = %s
+                """,
+                (
+                    researchRole,
+                    dataset_id,
+                ),
+            )
+
+    except Exception as exc:
+
+        logger.exception("Dataset upload failed.")
+
+        raise HTTPException(
+            status_code=500,
+            detail=str(exc),
+        ) from exc
+
+    return {
+        "message": "Dataset uploaded successfully.",
+        "datasetId": dataset_id,
+        "name": dataset_name,
+        "type": source_type,
+        "researchRole": researchRole,
+        "totalRecords": len(feedback_texts),
+    }
+
+    user_id = int(current_user["sub"])
+
+    if not file.filename:
+
+        raise HTTPException(
+            status_code=400,
+            detail="No file provided.",
+        )
+
+    filename = file.filename.lower()
+
+    if filename.endswith(".csv"):
+
+        source_type = "CSV"
+
+    elif filename.endswith(".json"):
+
+        source_type = "JSON"
+
+    else:
+
+        raise HTTPException(
+            status_code=400,
+            detail=("Only CSV and JSON " "files are supported."),
+        )
+
+    content = await file.read()
+
+    if len(content) > (100 * 1024 * 1024):
+
+        raise HTTPException(
+            status_code=413,
+            detail=("File too large. " "Maximum size is 100MB."),
+        )
+
+    try:
+
+        if source_type == "CSV":
+
+            feedback_texts = parse_csv_file(content)
+
+        else:
+
+            feedback_texts = parse_json_file(content)
+
+    except DatasetParseError as exc:
+
+        raise HTTPException(
+            status_code=422,
+            detail=str(exc),
+        ) from exc
+
+    dataset_name = name.strip() if name else file.filename
+
+    try:
+
+        dataset_id = save_dataset_to_db(
+            user_id=user_id,
+            source_name=dataset_name,
+            source_type=source_type,
+            feedback_texts=feedback_texts,
+            file_path=file.filename,
+            description=description,
+        )
+
+        # Research role is metadata,
+        # not file format information.
+
+        with get_cursor(commit=True) as cur:
+
+            cur.execute(
+                """
+                UPDATE datasets
+                SET research_role = %s
+                WHERE dataset_id = %s
+                """,
+                (
+                    researchRole,
+                    dataset_id,
+                ),
+            )
+
+    except Exception as exc:
+
+        logger.exception("Dataset upload failed.")
+
+        raise HTTPException(
+            status_code=500,
+            detail=str(exc),
+        ) from exc
+
+    return {
+        "message": "Dataset uploaded successfully.",
+        "datasetId": dataset_id,
+        "name": dataset_name,
+        "type": source_type,
+        "researchRole": researchRole,
+        "totalRecords": len(feedback_texts),
+    }
+
     user_id = current_user["sub"]
 
     if not file.filename:
@@ -685,12 +759,14 @@ async def upload_dataset(
 
     try:
         content = await file.read()
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"Failed to read file: {str(exc)}")
-
-    if len(content) > 10 * 1024 * 1024:
+    except Exception as exc:  # noqa: BLE001
         raise HTTPException(
-            status_code=413, detail="File too large. Maximum size is 10MB."
+            status_code=400, detail=f"Failed to read file: {str(exc)}"
+        )  # noqa: RUF010
+
+    if len(content) > 100 * 1024 * 1024:
+        raise HTTPException(
+            status_code=413, detail="File too large. Maximum size is 100MB."
         )
 
     try:
@@ -698,8 +774,8 @@ async def upload_dataset(
             feedback_texts = parse_csv_file(content)
         else:
             feedback_texts = parse_json_file(content)
-    except DatasetParseError as e:
-        raise HTTPException(status_code=422, detail=str(exc))
+    except DatasetParseError as e:  # noqa: F841
+        raise HTTPException(status_code=422, detail=str(exc))  # noqa: F821
 
     if not feedback_texts:
         raise HTTPException(
@@ -717,9 +793,10 @@ async def upload_dataset(
             file_path=file.filename,
             description=description,
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         raise HTTPException(
-            status_code=500, detail=f"Failed to save dataset: {str(exc)}"
+            status_code=500,
+            detail=f"Failed to save dataset: {str(exc)}",  # noqa: RUF010
         )
 
     return {
@@ -731,249 +808,631 @@ async def upload_dataset(
     }
 
 
-@datasets_router.get("", response_model=DatasetListResponse)
+@datasets_router.post(
+    "/upload-labelled",
+    status_code=201,
+)
+async def upload_labelled_dataset(
+    file: UploadFile = File(...),  # noqa: B008
+    name: str | None = Form(None),
+    description: str | None = Form(None),
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+):
+    """
+    Upload a labelled evaluation CSV.
+
+    Supported examples:
+
+        text,label
+        "registration was smooth",SELF
+        "claim free bitcoin",NON_SELF
+
+    Also supports datasets such as:
+
+        v1,v2
+        ham,"Hey, are you coming?"
+        spam,"Congratulations! You won..."
+    """
+
+    user_id = int(current_user["sub"])
+
+    # --------
+    # Validate file
+    # --------
+
+    if not file.filename or not file.filename.lower().endswith(".csv"):
+        raise HTTPException(
+            status_code=400,
+            detail=("A labelled experiment " "dataset must be CSV."),
+        )
+
+    # --------
+    # Read file
+    # --------
+
+    try:
+        content = await file.read()
+
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to read file: {exc}",
+        ) from exc
+
+    # --------
+    # File size
+    # --------
+
+    if len(content) > 100 * 1024 * 1024:
+        raise HTTPException(
+            status_code=413,
+            detail=("File too large. " "Maximum size is 100MB."),
+        )
+
+    # --------
+    # Parse labelled CSV
+    # --------
+
+    try:
+        parsed_records = parse_labelled_csv_file(content)
+
+    except DatasetParseError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=str(exc),
+        ) from exc
+
+    if not parsed_records:
+        raise HTTPException(
+            status_code=422,
+            detail=("No valid labelled " "records found."),
+        )
+
+    # --------
+    # Convert to tuple format used below
+    # --------
+
+    records = [
+        (
+            record["text"],
+            record["label"],
+        )
+        for record in parsed_records
+    ]
+
+    # --------
+    # Dataset name
+    # --------
+
+    dataset_name = name.strip() if name and name.strip() else file.filename
+
+    # --------
+    # Save dataset
+    # --------
+
+    try:
+        with get_cursor(commit=True) as cur:
+
+            cur.execute(
+                """
+                INSERT INTO datasets
+                (
+                    source_name,
+                    source_type,
+                    dataset_description,
+                    file_path,
+                    total_records,
+                    research_role,
+                    loaded_by
+                )
+
+                VALUES
+                (
+                    %s,
+                    %s,
+                    %s,
+                    %s,
+                    %s,
+                    'EVALUATION',
+                    %s
+                )
+
+                RETURNING dataset_id
+                """,
+                (
+                    dataset_name,
+                    "CSV",
+                    description,
+                    file.filename,
+                    len(records),
+                    user_id,
+                ),
+            )
+
+            dataset_id = int(cur.fetchone()["dataset_id"])
+
+            #
+            # Save labelled records
+            #
+
+            for text, label in records:
+
+                cur.execute(
+                    """
+                    INSERT INTO feedback_records
+                    (
+                        dataset_id,
+                        raw_text,
+                        ground_truth_label,
+                        preprocessing_complete
+                    )
+
+                    VALUES
+                    (
+                        %s,
+                        %s,
+                        %s,
+                        FALSE
+                    )
+                    """,
+                    (
+                        dataset_id,
+                        text,
+                        label,
+                    ),
+                )
+
+    except Exception as exc:
+
+        logger.exception("Labelled dataset upload failed.")
+
+        raise HTTPException(
+            status_code=500,
+            detail=(f"Failed to save labelled " f"dataset: {exc}"),
+        ) from exc
+
+    # --------
+    # Counts
+    # --------
+
+    self_count = sum(1 for _, label in records if label == "SELF")
+
+    non_self_count = sum(1 for _, label in records if label == "NON_SELF")
+
+    # --------
+    # Response
+    # --------
+
+    return {
+        "message": ("Labelled evaluation dataset " "uploaded successfully."),
+        "datasetId": dataset_id,
+        "name": dataset_name,
+        "researchRole": "EVALUATION",
+        "totalRecords": len(records),
+        "selfRecords": self_count,
+        "nonSelfRecords": non_self_count,
+    }
+
+
+@datasets_router.get("")
 def list_datasets(
     limit: int = 50,
     offset: int = 0,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),  # noqa: B008
 ):
-    user_id = current_user["sub"]
 
-    try:
-        datasets = get_user_datasets(user_id, limit, offset)
-    except Exception as exc:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to retrieve datasets: {str(exc)}"
-        )
+    user_id = int(current_user["sub"])
 
-    return DatasetListResponse(
-        total=len(datasets), datasets=[DatasetInfo(**d) for d in datasets]
+    datasets = get_user_datasets(
+        user_id,
+        limit,
+        offset,
     )
 
+    return {
+        "total": len(datasets),
+        "datasets": datasets,
+    }
 
-@datasets_router.get("/{dataset_id}", response_model=DatasetDetailResponse)
+
+@datasets_router.get("/{dataset_id}")
 def get_dataset(
     dataset_id: int,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),  # noqa: B008
 ):
-    user_id = current_user["sub"]
 
-    try:
-        dataset = get_dataset_by_id(dataset_id, user_id)
-    except Exception as exc:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to retrieve dataset: {str(exc)}"
-        )
+    user_id = int(current_user["sub"])
+
+    dataset = get_dataset_by_id(
+        dataset_id,
+        user_id,
+    )
 
     if not dataset:
+
         raise HTTPException(
             status_code=404,
-            detail="Dataset not found or you don't have permission to view it",
+            detail="Dataset not found.",
         )
 
-    return DatasetDetailResponse(**dataset)
+    return dataset
 
 
-@datasets_router.get("/{dataset_id}/feedback", response_model=DatasetFeedbackResponse)
-def get_dataset_feedback_records(
+@datasets_router.get("/{dataset_id}/feedback")
+def dataset_records(
     dataset_id: int,
     limit: int = 100,
     offset: int = 0,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),  # noqa: B008
 ):
-    user_id = current_user["sub"]
 
-    try:
-        dataset = get_dataset_by_id(dataset_id, user_id)
-    except Exception as exc:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to verify dataset: {str(exc)}"
-        )
+    user_id = int(current_user["sub"])
+
+    dataset = get_dataset_by_id(
+        dataset_id,
+        user_id,
+    )
 
     if not dataset:
+
         raise HTTPException(
             status_code=404,
-            detail="Dataset not found or you don't have permission to view it",
+            detail="Dataset not found.",
         )
 
-    try:
-        records = get_dataset_feedback(dataset_id, limit, offset)
-    except Exception as exc:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to retrieve feedback records: {str(exc)}"
-        )
-
-    return DatasetFeedbackResponse(
-        datasetId=dataset_id,
-        total=len(records),
-        records=[FeedbackRecord(**r) for r in records],
+    records = get_dataset_feedback(
+        dataset_id,
+        limit,
+        offset,
     )
+
+    return {
+        "datasetId": dataset_id,
+        "total": len(records),
+        "records": records,
+    }
 
 
 @datasets_router.delete("/{dataset_id}")
-def delete_dataset_endpoint(
+def remove_dataset(
     dataset_id: int,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),  # noqa: B008
 ):
-    user_id = current_user["sub"]
 
-    try:
-        success = delete_dataset(dataset_id, user_id)
-    except Exception as exc:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to delete dataset: {str(exc)}"
-        )
+    user_id = int(current_user["sub"])
+
+    success = delete_dataset(
+        dataset_id,
+        user_id,
+    )
 
     if not success:
+
         raise HTTPException(
             status_code=404,
-            detail="Dataset not found or you don't have permission to delete it",
+            detail="Dataset not found.",
         )
 
-    return {"message": "Dataset deleted successfully", "datasetId": dataset_id}
+    return {
+        "message": "Dataset deleted successfully.",
+        "datasetId": dataset_id,
+    }
 
 
-dashboard_router = APIRouter(
-    prefix="/api/dashboard",
-    tags=["Dashboard"],
+# Experiments
+
+
+@experiments_router.post(
+    "/run",
+    status_code=201,
 )
+def start_experiment(
+    body: RunExperimentRequest,
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+):
+
+    user_id = int(current_user["sub"])
+
+    # Research parameter validation
+
+    if not (1 <= body.detectorCount <= 5000):
+
+        raise HTTPException(
+            status_code=422,
+            detail=("detectorCount must be " "between 1 and 5000."),
+        )
+
+    if not (0.001 <= body.detectorRadius <= 2.0):
+
+        raise HTTPException(
+            status_code=422,
+            detail=("detectorRadius must be " "between 0.001 and 2.0."),
+        )
+
+    if not (0.001 <= body.selfMatchThreshold <= 2.0):
+
+        raise HTTPException(
+            status_code=422,
+            detail=("selfMatchThreshold must " "be between 0.001 and 2.0."),
+        )
+
+    if not (1 <= body.maxAttempts <= 1_000_000):
+
+        raise HTTPException(
+            status_code=422,
+            detail=("maxAttempts must be " "between 1 and 1,000,000."),
+        )
+
+    try:
+
+        summary = run_experiment(
+            user_id=user_id,
+            dataset_id=body.datasetId,
+            experiment_name=(body.experimentName),
+            experiment_description=(body.experimentDescription),
+            detector_count=(body.detectorCount),
+            detector_radius=(body.detectorRadius),
+            self_match_threshold=(body.selfMatchThreshold),
+            max_attempts=(body.maxAttempts),
+            random_seed=(body.randomSeed),
+        )
+
+    except ValueError as exc:
+
+        raise HTTPException(
+            status_code=422,
+            detail=str(exc),
+        ) from exc
+
+    except RuntimeError as exc:
+
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        ) from exc
+
+    except Exception as exc:
+
+        logger.exception("Experiment execution failed.")
+
+        raise HTTPException(
+            status_code=500,
+            detail=("The NSA experiment failed."),
+        ) from exc
+
+    return {
+        "experimentId": summary.experiment_id,
+        "experimentName": summary.experiment_name,
+        "totalRecords": summary.total_records,
+        "selfCount": summary.self_count,
+        "nonSelfCount": summary.non_self_count,
+        "oovCount": summary.oov_count,
+        "requestedDetectorCount": summary.requested_detector_count,
+        "generatedDetectorCount": summary.generated_detector_count,
+        "detectorGenerationAttempts": summary.detector_generation_attempts,
+        "detectorAcceptanceRate": summary.detector_acceptance_rate,
+        "trainingTimeMs": summary.training_time_ms,
+        "detectionTimeMs": summary.detection_time_ms,
+        "totalExecutionTimeMs": summary.total_execution_time_ms,
+        "confusionMatrix": (
+            {
+                "truePositive": summary.confusion_matrix.true_positive,
+                "trueNegative": summary.confusion_matrix.true_negative,
+                "falsePositive": summary.confusion_matrix.false_positive,
+                "falseNegative": summary.confusion_matrix.false_negative,
+            }
+            if summary.confusion_matrix
+            else None
+        ),
+        "metrics": (
+            {
+                "accuracy": summary.metrics.accuracy,
+                "precision": summary.metrics.precision,
+                "recall": summary.metrics.recall,
+                "specificity": summary.metrics.specificity,
+                "f1Score": summary.metrics.f1_score,
+                "detectionRate": summary.metrics.detection_rate,
+                "falseAlarmRate": summary.metrics.false_alarm_rate,
+                "falseNegativeRate": summary.metrics.false_negative_rate,
+            }
+            if summary.metrics
+            else None
+        ),
+    }
 
 
-@dashboard_router.get("/summary")
-def dashboard_summary(current_user: dict = Depends(get_current_user)):
-    user_id = current_user["sub"]
+@experiments_router.get("")
+def experiment_history(
+    limit: int = 50,
+    offset: int = 0,
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+):
+
+    experiments = list_experiments(
+        int(current_user["sub"]),
+        limit,
+        offset,
+    )
+
+    return {
+        "total": len(experiments),
+        "experiments": experiments,
+    }
+
+
+@experiments_router.get("/{experiment_id}")
+def experiment_details(
+    experiment_id: int,
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+):
+
+    experiment = get_experiment(
+        experiment_id,
+        int(current_user["sub"]),
+    )
+
+    if not experiment:
+
+        raise HTTPException(
+            status_code=404,
+            detail=("Experiment not found."),
+        )
+
+    return experiment
+
+
+@experiments_router.get("/{experiment_id}/results")
+def experiment_results(
+    experiment_id: int,
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+):
+
+    user_id = int(current_user["sub"])
+
+    experiment = get_experiment(
+        experiment_id,
+        user_id,
+    )
+
+    if not experiment:
+
+        raise HTTPException(
+            status_code=404,
+            detail=("Experiment not found."),
+        )
+
+    results = get_experiment_results(experiment_id)
+
+    return {
+        "experimentId": experiment_id,
+        "total": len(results),
+        "results": results,
+    }
+
+
+@experiments_router.get("/{experiment_id}/detectors")
+def experiment_detectors(
+    experiment_id: int,
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+):
+
+    user_id = int(current_user["sub"])
+
+    experiment = get_experiment(
+        experiment_id,
+        user_id,
+    )
+
+    if not experiment:
+
+        raise HTTPException(
+            status_code=404,
+            detail=("Experiment not found."),
+        )
 
     with get_cursor() as cur:
+
         cur.execute(
             """
             SELECT
-                COUNT(*)                        AS dataset_count,
-                COALESCE(SUM(total_records), 0) AS total_feedback
-            FROM datasets
-            WHERE loaded_by = %s
-            """,
-            (user_id,),
-        )
-        ds = cur.fetchone()
+                detector_id,
+                detector_index,
+                radius,
+                minimum_self_distance,
+                created_at
 
-        dataset_count = int(ds["dataset_count"])
-        total_feedback = int(ds["total_feedback"])
-        cur.execute(
-            """
-            SELECT total_records, valid_records, suspicious_records, created_at
-            FROM nsa_sessions
-            WHERE user_id = %s
-            ORDER BY created_at DESC
-            LIMIT 1
-            """,
-            (user_id,),
-        )
-        nsa = cur.fetchone()
+            FROM nsa_detectors
 
-        nsa_total = int(nsa["total_records"]) if nsa else 0
-        nsa_valid = int(nsa["valid_records"]) if nsa else 0
-        nsa_suspicious = int(nsa["suspicious_records"]) if nsa else 0
-        nsa_pass_rate = round((nsa_valid / nsa_total) * 100) if nsa_total else 0
-        nsa_run_at = nsa["created_at"].isoformat() if nsa else None
-        cur.execute(
-            "SELECT COUNT(*) AS cnt FROM nsa_sessions WHERE user_id = %s",
-            (user_id,),
-        )
-        nsa_session_count = int(cur.fetchone()["cnt"])
-        cur.execute(
-            """
-            SELECT COUNT(*) AS cnt
-            FROM sentiment_results sr
-            JOIN feedback_records fr ON fr.feedback_id = sr.feedback_id
-            JOIN datasets d ON d.dataset_id = fr.dataset_id
-            WHERE d.loaded_by = %s
-            """,
-            (user_id,),
-        )
-        sentiment_count = int(cur.fetchone()["cnt"])
-        # Pull the 8 most recent significant events for this user.
-        cur.execute(
-            """
-            (
-                SELECT
-                    'nsa_scan' AS event_type,
-                    'NSA scan completed' AS title,
-                    total_records::TEXT AS detail,
-                    created_at
-                FROM nsa_sessions
-                WHERE user_id = %s
-                ORDER BY created_at DESC
-                LIMIT 3
-            )
-            UNION ALL
-            (
-                SELECT
-                    'dataset_loaded' AS event_type,
-                    'Dataset loaded' AS title,
-                    source_name AS detail,
-                    loaded_at AS created_at
-                FROM datasets
-                WHERE loaded_by = %s
-                ORDER BY loaded_at DESC
-                LIMIT 3
-            )
-            UNION ALL
-            (
-                SELECT
-                    'account_created' AS event_type,
-                    'User account created' AS title,
-                    full_name AS detail,
-                    created_at
-                FROM users
-                WHERE user_id = %s
-                LIMIT 1
-            )
-            ORDER BY created_at DESC
-            LIMIT 8
-            """,
-            (user_id, user_id, user_id),
-        )
-        activity_rows = cur.fetchall()
+            WHERE experiment_id = %s
 
-    activity = [
-        {
-            "eventType": row["event_type"],
-            "title": row["title"],
-            "detail": row["detail"],
-            "createdAt": row["created_at"].isoformat() if row["created_at"] else None,
-        }
-        for row in activity_rows
-    ]
+            ORDER BY detector_index
+            """,
+            (experiment_id,),
+        )
+
+        detectors = cur.fetchall()
 
     return {
-        # Stat cards
-        "datasetCount": dataset_count,
-        "totalFeedback": total_feedback,
-        "nsaTotalRecords": nsa_total,
-        "nsaValidRecords": nsa_valid,
-        "nsaSuspiciousRecords": nsa_suspicious,
-        "nsaPassRate": nsa_pass_rate,
-        "nsaSessionCount": nsa_session_count,
-        "sentimentCount": sentiment_count,
-        # Donut chart
-        "donutData": [
-            {"name": "Valid (NSA Cleared)", "value": nsa_valid},
-            {"name": "Suspicious (Blocked)", "value": nsa_suspicious},
-        ],
-        # Pipeline — derived from what the user has actually done
-        "pipeline": {
-            "datasetLoaded": dataset_count > 0,
-            "nsaRun": nsa_session_count > 0,
-            "sentimentRun": sentiment_count > 0,
+        "experimentId": experiment_id,
+        "total": len(detectors),
+        "detectors": detectors,
+    }
+
+
+@experiments_router.get("/{experiment_id}/summary")
+def experiment_research_summary(
+    experiment_id: int,
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+):
+
+    user_id = int(current_user["sub"])
+
+    experiment = get_experiment(
+        experiment_id,
+        user_id,
+    )
+
+    if not experiment:
+
+        raise HTTPException(
+            status_code=404,
+            detail=("Experiment not found."),
+        )
+
+    return {
+        "experiment": {
+            "id": experiment["experiment_id"],
+            "name": experiment["experiment_name"],
+            "status": experiment["status"],
         },
-        "nsaRunAt": nsa_run_at,
-        # Activity
-        "activity": activity,
+        "parameters": {
+            "detectorCount": experiment["requested_detector_count"],
+            "generatedDetectors": experiment["generated_detector_count"],
+            "detectorRadius": experiment["detector_radius"],
+            "selfMatchThreshold": experiment["self_match_threshold"],
+            "maxAttempts": experiment["max_attempts"],
+            "randomSeed": experiment["random_seed"],
+        },
+        "featureSpace": {
+            "vocabularySize": experiment["vocabulary_size"],
+            "selfCorpusSize": experiment["self_corpus_size"],
+        },
+        "detectorGeneration": {
+            "attempts": experiment["detector_generation_attempts"],
+            "acceptanceRate": experiment["detector_acceptance_rate"],
+        },
+        "classification": {
+            "total": experiment["total_records"],
+            "self": experiment["self_count"],
+            "nonSelf": experiment["non_self_count"],
+            "oov": experiment["oov_count"],
+        },
+        "confusionMatrix": {
+            "tp": experiment["true_positive"],
+            "tn": experiment["true_negative"],
+            "fp": experiment["false_positive"],
+            "fn": experiment["false_negative"],
+        },
+        "metrics": {
+            "accuracy": experiment["accuracy"],
+            "precision": experiment["precision_score"],
+            "recall": experiment["recall_score"],
+            "specificity": experiment["specificity"],
+            "f1Score": experiment["f1_score"],
+            "detectionRate": experiment["detection_rate"],
+            "falseAlarmRate": experiment["false_alarm_rate"],
+            "falseNegativeRate": experiment["false_negative_rate"],
+        },
+        "performance": {
+            "trainingTimeMs": experiment["training_time_ms"],
+            "detectionTimeMs": experiment["detection_time_ms"],
+            "totalExecutionTimeMs": experiment["total_execution_time_ms"],
+        },
     }
 
 
 app.include_router(auth_router)
 app.include_router(datasets_router)
 app.include_router(nsa_router)
-app.include_router(sentiment_router)
-app.include_router(dashboard_router)
+# app.include_router(sentiment_router)
+app.include_router(experiments_router)
