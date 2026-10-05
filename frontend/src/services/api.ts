@@ -302,13 +302,32 @@ export interface Experiment extends Record<string, unknown> {
   created_at?: string | null;
   dataset_id?: number;
   training_dataset_id?: number | null;
+  experiment_description?: string | null;
+  training_corpus_hash?: string | null;
   accuracy?: MetricValue;
   precision_score?: MetricValue;
   recall_score?: MetricValue;
   f1_score?: MetricValue;
 }
 export interface ResearchSummary extends Record<string, unknown> {
-  experiment: { id: number; name: string; status: string };
+  experiment: {
+    id: number;
+    name: string;
+    status: string;
+    description?: string | null;
+    experimentDescription?: string | null;
+    experiment_description?: string | null;
+    createdAt?: string | null;
+    created_at?: string | null;
+    datasetId?: number | null;
+    dataset_id?: number | null;
+    datasetName?: string | null;
+    dataset_name?: string | null;
+    trainingDatasetId?: number | null;
+    training_dataset_id?: number | null;
+    trainingCorpusHash?: string | null;
+    training_corpus_hash?: string | null;
+  };
   parameters: {
     detectorCount: number;
     generatedDetectors: number;
@@ -421,6 +440,58 @@ export async function getDetectors(
       total: number;
       detectors: Detector[];
     }>(`/api/experiments/${id}/detectors`, { headers: authHeader(token) })
+  ).data;
+}
+
+// Sentiment classification uses only records accepted by the latest NSA run.
+export interface LatestValidFeedbackResponse {
+  found: boolean;
+  sessionInfo: {
+    totalRecords: number;
+    validRecords: number;
+    suspiciousRecords: number;
+    createdAt: string | null;
+  } | null;
+  records: Array<{ id: number; text: string }>;
+}
+export type SentimentLabel = "Positive" | "Negative" | "Neutral";
+export interface SentimentItem {
+  id: number;
+  originalText: string;
+  label: SentimentLabel;
+  confidence: number;
+  model: string;
+}
+export interface SentimentAnalysisResponse {
+  totalRecords: number;
+  positiveCount: number;
+  negativeCount: number;
+  neutralCount: number;
+  results: SentimentItem[];
+}
+export async function getLatestValidFeedback(
+  token: string,
+): Promise<LatestValidFeedbackResponse> {
+  return (
+    await apiClient.get<LatestValidFeedbackResponse>("/api/nsa/latest-valid", {
+      headers: authHeader(token),
+    })
+  ).data;
+}
+export async function runSentimentAnalysis(
+  token: string,
+  texts: string[],
+): Promise<SentimentAnalysisResponse> {
+  return (
+    await apiClient.post<SentimentAnalysisResponse>(
+      "/api/sentiment/analyse",
+      { texts },
+      {
+        headers: authHeader(token),
+        // Initial model loading may take longer than a typical API request.
+        timeout: 0,
+      },
+    )
   ).data;
 }
 

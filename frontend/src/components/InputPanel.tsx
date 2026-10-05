@@ -63,9 +63,7 @@ const ARRAY_KEYS = [
 function cleanText(value: string): string {
   return value.replace(/\s+/g, " ").trim();
 }
-// ---------------------------------
 // File and API response parsing helpers
-// ---------------------------------
 
 function parseTxt(text: string): string {
   return text
@@ -357,9 +355,7 @@ async function fetchApiFeedback(apiUrl: string): Promise<string> {
   return parseTxt(text);
 }
 
-// ---------------------------------
 // Component
-// ---------------------------------
 
 export function InputPanel({
   value,

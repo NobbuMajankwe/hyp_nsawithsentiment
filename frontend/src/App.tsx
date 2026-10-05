@@ -1,85 +1,53 @@
-import { useState } from 'react';
-import { Navigate, Route, Routes } from 'react-router-dom';
-import { Box } from '@mui/material';
-
-import { Header, SIDENAV_WIDTH, SIDENAV_COLLAPSED_WIDTH, HEADER_HEIGHT } from './components/Header';
-//import { SentimentPage } from './pages/SentimentPage';
-import { InsightStoryPage } from './pages/InsightStoryPage';
-import { NsaPage } from './pages/NsaPage';
-import { LoginPage, RegisterPage, ResetPasswordPage } from './pages/LoginPage';
-import ProfilePage from './pages/ProfilePage';
-import Dashboard from './pages/Dashboard';
-import { useAuth } from './context/AuthContext';
-import Settings from './pages/Settings';
-import DatasetsPage from './pages/DatasetsPage';
-import ExperimentPage from './pages/ExperimentPage';
-
-// ---------------------------------
-// Auth gate — unauthenticated users see login/register/reset
-// ---------------------------------
+import { useState } from "react";
+import { Navigate, Route, Routes } from "react-router-dom";
+import {
+  Box,
+  Container,
+} from "@mui/material";
+import { LoginPage, RegisterPage, ResetPasswordPage } from "./pages/LoginPage";
+import ProfilePage from "./pages/ProfilePage";
+import Dashboard from "./pages/Dashboard";
+import DatasetsPage from "./pages/DatasetsPage";
+import ExperimentPage from "./pages/ExperimentPage";
+import { NsaPage } from "./pages/NsaPage";
+import SentimentPage from "./pages/SentimentPage";
+import { useAuth } from "./context/AuthContext";
+import { Header } from "./components/Header";
 
 function AuthGate() {
-  const [view, setView] = useState<'login' | 'register' | 'reset'>('login');
-
-  switch (view) {
-    case 'register':
-      return <RegisterPage onSwitchToLogin={() => setView('login')} />;
-    case 'reset':
-      return <ResetPasswordPage onBackToLogin={() => setView('login')} />;
-    default:
-      return (
-        <LoginPage
-          onSwitchToRegister={() => setView('register')}
-          onSwitchToReset={() => setView('reset')}
-        />
-      );
-  }
-}
-
-// ---------------------------------
-// Protected shell — header + sidenav + routed content
-// ---------------------------------
-
-function AppShell() {
-  const [expanded, setExpanded] = useState(true);
-  const sideWidth = expanded ? SIDENAV_WIDTH : SIDENAV_COLLAPSED_WIDTH;
-
+  const [view, setView] = useState<"login" | "register" | "reset">("login");
+  if (view === "register")
+    return <RegisterPage onSwitchToLogin={() => setView("login")} />;
+  if (view === "reset")
+    return <ResetPasswordPage onBackToLogin={() => setView("login")} />;
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: '#020617' }}>
-      <Header expanded={expanded} onToggle={() => setExpanded((e) => !e)} />
-
-      <Box
-        sx={{
-          ml: { xs: 0, lg: `${sideWidth}px` },
-          mt: `${HEADER_HEIGHT}px`,
-          transition: 'margin-left 0.25s ease',
-          minHeight: `calc(100vh - ${HEADER_HEIGHT}px)`,
-        }}
-      >
+    <LoginPage
+      onSwitchToRegister={() => setView("register")}
+      onSwitchToReset={() => setView("reset")}
+    />
+  );
+}
+export default function App() {
+  const { isAuthenticated } = useAuth();
+  if (!isAuthenticated) return <AuthGate />;
+  return (
+    <Box sx={{ minHeight: "100vh", bgcolor: "#0b1020", color: "#0b1020", m:-1 }}>
+      <Header/>
+      <Container maxWidth="lg" sx={{ py: 4 }}>
         <Routes>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/nsa" element={<NsaPage />} />
-          {/* <Route path="/sentiment" element={<SentimentPage />} /> */}
-          <Route path="/insight" element={<InsightStoryPage />} />
-          <Route path="/profile" element={<ProfilePage />} />
-          <Route path="/settings" element={<Settings />} />
-          <Route path="/analytics" element={<ProfilePage />} />
           <Route path="/datasets" element={<DatasetsPage />} />
-          <Route path="/experiments/:experimentId" element={<ExperimentPage />} />
-          {/* Catch-all back to dashboard */}
+          <Route path="/nsa" element={<NsaPage />} />
+          <Route path="/sentiment" element={<SentimentPage />} />
+          <Route
+            path="/experiments/:experimentId"
+            element={<ExperimentPage />}
+          />
+          <Route path="/profile" element={<ProfilePage />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
-      </Box>
+      </Container>
     </Box>
   );
-}
-
-// ---------------------------------
-// Root — switches between auth gate and app shell
-// ---------------------------------
-
-export default function App() {
-  const { isAuthenticated } = useAuth();
-  return isAuthenticated ? <AppShell /> : <AuthGate />;
 }

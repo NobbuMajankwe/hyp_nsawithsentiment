@@ -154,9 +154,7 @@ export function LoginPage({ onSwitchToRegister, onSwitchToReset }: Props) {
   );
 }
 
-// ---------------------------------
 // Register page
-// ---------------------------------
 
 interface RegisterProps {
   onSwitchToLogin: () => void;
@@ -384,9 +382,7 @@ export function RegisterPage({ onSwitchToLogin }: RegisterProps) {
   );
 }
 
-// ---------------------------------
 // ResetPassword page
-// ---------------------------------
 
 interface ResetPasswordProps {
   onBackToLogin: () => void;
@@ -548,9 +544,7 @@ export function ResetPasswordPage({ onBackToLogin }: ResetPasswordProps) {
     </AuthLayout>
   );
 }
-// ---------------------------------
 // Shared layout wrapper
-// ---------------------------------
 
 function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -687,9 +681,7 @@ function AuthLayout({ children }: { children: React.ReactNode }) {
     </Box>
   );
 }
-// ---------------------------------
 // Helper — extract FastAPI detail message from axios errors
-// ---------------------------------
 
 function axios_detail(err: unknown): string | null {
   if (

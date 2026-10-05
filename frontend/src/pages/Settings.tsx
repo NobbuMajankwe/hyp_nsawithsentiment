@@ -25,9 +25,7 @@ import { useAuth } from "../context/AuthContext";
 import { useState, useEffect } from "react";
 import { fetchNsaConfig, saveNsaConfig, type NsaConfig } from "../services/api";
 
-// ---------------------------------
 // NSA defaults (mirrors backend)
-// ---------------------------------
 const NSA_DEFAULTS: NsaConfig = {
   detectorCount: 200,
   detectorRadius: 0.40,

@@ -40,14 +40,7 @@ TEXT_FIELD_NAMES = (
     "v2",
 )
 
-LABEL_FIELD_NAMES = (
-    "label",
-    "ground_truth",
-    "target",
-    "class",
-    "category",
-    "v1",
-)
+LABEL_FIELD_NAMES = ("label", "ground_truth", "target", "class", "category", "v1", "id")
 
 VALID_RESEARCH_ROLES = {
     "SELF_CORPUS",

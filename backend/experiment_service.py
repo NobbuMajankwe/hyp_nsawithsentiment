@@ -685,18 +685,14 @@ def run_experiment(
 
     texts = [row["raw_text"] for row in records]
 
-    # --------------
     # Training dataset
-    # --------------
 
     training_dataset_id = get_self_dataset_id()
 
     if training_dataset_id is None:
         raise RuntimeError("No SELF_CORPUS dataset has " "been configured.")
 
-    # --------------
     # NSA
-    # --------------
 
     nsa = get_nsa(
         detector_count=detector_count,
@@ -706,9 +702,7 @@ def run_experiment(
         random_seed=random_seed,
     )
 
-    # --------------
     # Experiment metadata
-    # --------------
 
     experiment_id = create_experiment(
         user_id=user_id,
