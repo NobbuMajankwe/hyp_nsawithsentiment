@@ -11,6 +11,7 @@ import DatasetsPage from "./pages/DatasetsPage";
 import ExperimentPage from "./pages/ExperimentPage";
 import { NsaPage } from "./pages/NsaPage";
 import SentimentPage from "./pages/SentimentPage";
+import { InsightStoryPage } from "./pages/InsightStoryPage";
 import { useAuth } from "./context/AuthContext";
 import { Header } from "./components/Header";
 
@@ -33,13 +34,14 @@ export default function App() {
   return (
     <Box sx={{ minHeight: "100vh", bgcolor: "#0b1020", color: "#0b1020", m:-1 }}>
       <Header/>
-      <Container maxWidth="lg" sx={{ py: 4 }}>
+      <Container maxWidth="lg" sx={{ py: 1 }}>
         <Routes>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/datasets" element={<DatasetsPage />} />
           <Route path="/nsa" element={<NsaPage />} />
           <Route path="/sentiment" element={<SentimentPage />} />
+          <Route path="/insight" element={<InsightStoryPage />} />
           <Route
             path="/experiments/:experimentId"
             element={<ExperimentPage />}

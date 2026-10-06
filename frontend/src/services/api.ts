@@ -443,6 +443,13 @@ export async function getDetectors(
   ).data;
 }
 
+// Legacy shape used by SignalSummaryPanel (customer-facing flow).
+export interface AnalyseResponse {
+  totalRecords: number;
+  validRecords: number;
+  suspiciousRecords: number;
+}
+
 // Sentiment analysis — POST /api/sentiment/analyse
 // Source texts come from the SELF-classified records of a chosen experiment.
 export type SentimentLabel = "Positive" | "Negative" | "Neutral";

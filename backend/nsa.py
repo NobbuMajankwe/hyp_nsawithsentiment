@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 
-#import json
+# import json
 import math
 import random as _rnd
 import re
@@ -10,14 +10,14 @@ import string
 import time
 from dataclasses import dataclass
 
-#from typing import Optional
+# from typing import Optional
 import nltk
 from database import get_cursor
 
 # from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
 
-#from nltk.tokenize import word_tokenize
+# from nltk.tokenize import word_tokenize
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.preprocessing import Normalizer
 
@@ -38,9 +38,7 @@ lemmatizer = WordNetLemmatizer()
 
 # Helper function to load normal corpus from database
 def load_normal_corpus_from_db() -> list[str]:
-    """
-    Load the SELF / normal feedback corpus used to define self-space.
-    """
+   
 
     with get_cursor() as cur:
         cur.execute(
@@ -76,13 +74,10 @@ def load_normal_corpus_from_db() -> list[str]:
 
 
 def corpus_hash(corpus: list[str]) -> str:
-    """
-    Create a reproducible fingerprint of the training corpus.
-    """
 
     canonical = "\n".join(sorted(text.strip() for text in corpus if text.strip()))
 
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()  
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 # Text utilities
@@ -232,7 +227,6 @@ def normalise_vector(vector: list[float]) -> list[float]:
 # Data classes
 @dataclass
 class Detector:
-    
 
     detector_id: int
     vector: list[float]
@@ -250,18 +244,18 @@ class Detector:
         )
 
     def matches(self, feature_vector: list[float]) -> float | None:
-       
+
         dist = euclidean_distance(self.vector, feature_vector)
         return dist if dist <= self.radius else None
 
 
 @dataclass
 class NSAResult:
-
-    """ 
+    """
     nsa_status: str  # "Valid" | "Suspicious"
     anomaly_score: int  # 0–100
-    anomaly_reason: str """
+    anomaly_reason: str"""
+
     id: int
     original_text: str
     cleaned_text: str
@@ -372,10 +366,9 @@ class NegativeSelectionAlgorithm:
         return normalise_vector(candidate)
 
     def _generate_detectors(self) -> None:
-        
-        """ dimensions = len(self.vocabulary)
+        """dimensions = len(self.vocabulary)
         if dimensions == 0:
-            return """
+            return"""
 
         self.detectors = []
         attempts = 0
@@ -634,6 +627,6 @@ def get_nsa(
         )
 
         nsa.train(normal_corpus)
-        _nsa_cache[cache_key] = nsa  
+        _nsa_cache[cache_key] = nsa
 
     return _nsa_cache[cache_key]

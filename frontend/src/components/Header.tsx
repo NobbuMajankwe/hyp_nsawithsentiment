@@ -28,6 +28,7 @@ export function Header() {
               ["Datasets", "/datasets"],
               ["Run experiment", "/nsa"],
               ["Sentiment", "/sentiment"],
+              ["Insight Story", "/insight"],
               ["Profile", "/profile"],
             ].map(([label, path]) => (
               <Button key={path} color="inherit" component={NavLink} to={path}>
