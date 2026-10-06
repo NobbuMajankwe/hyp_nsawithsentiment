@@ -124,6 +124,7 @@ export default function Dashboard() {
   useEffect(() => {
     if (!token) return;
     let active = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     setDatasets([]);
     setExperiments([]);
