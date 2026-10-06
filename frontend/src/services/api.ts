@@ -443,17 +443,8 @@ export async function getDetectors(
   ).data;
 }
 
-// Sentiment classification uses only records accepted by the latest NSA run.
-export interface LatestValidFeedbackResponse {
-  found: boolean;
-  sessionInfo: {
-    totalRecords: number;
-    validRecords: number;
-    suspiciousRecords: number;
-    createdAt: string | null;
-  } | null;
-  records: Array<{ id: number; text: string }>;
-}
+// Sentiment analysis — POST /api/sentiment/analyse
+// Source texts come from the SELF-classified records of a chosen experiment.
 export type SentimentLabel = "Positive" | "Negative" | "Neutral";
 export interface SentimentItem {
   id: number;
@@ -469,15 +460,6 @@ export interface SentimentAnalysisResponse {
   neutralCount: number;
   results: SentimentItem[];
 }
-export async function getLatestValidFeedback(
-  token: string,
-): Promise<LatestValidFeedbackResponse> {
-  return (
-    await apiClient.get<LatestValidFeedbackResponse>("/api/nsa/latest-valid", {
-      headers: authHeader(token),
-    })
-  ).data;
-}
 export async function runSentimentAnalysis(
   token: string,
   texts: string[],
@@ -488,82 +470,9 @@ export async function runSentimentAnalysis(
       { texts },
       {
         headers: authHeader(token),
-        // Initial model loading may take longer than a typical API request.
+        // Model loading on the first call can take a while.
         timeout: 0,
       },
-    )
-  ).data;
-}
-
-// Existing integration settings API, retained for callers in the user's app.
-// These routes must remain registered by the backend if those screens are used.
-export interface IntegrationSettings {
-  extApiUrl: string | null;
-  extApiToken: string | null;
-  extDataPath: string | null;
-  extTextField: string;
-  extIdField: string;
-  webhookUrl: string | null;
-  webhookSecret: string | null;
-  webhookEnabled: boolean;
-  nsaThreshold: number | null;
-  nsaDetectorCount: number | null;
-  apiKey: string | null;
-  apiKeyLabel: string | null;
-  apiKeyCreatedAt: string | null;
-  updatedAt: string | null;
-}
-export interface ConnectionTestResult {
-  success: boolean;
-  totalRecords: number;
-  preview: { id: string | number | null; text: string }[];
-}
-export async function fetchSettings(
-  token: string,
-): Promise<IntegrationSettings> {
-  return (
-    await apiClient.get<IntegrationSettings>("/api/settings", {
-      headers: authHeader(token),
-    })
-  ).data;
-}
-export async function saveSettings(
-  token: string,
-  payload: Partial<IntegrationSettings>,
-): Promise<IntegrationSettings> {
-  return (
-    await apiClient.put<IntegrationSettings>("/api/settings", payload, {
-      headers: authHeader(token),
-    })
-  ).data;
-}
-export async function generateApiKey(
-  token: string,
-): Promise<IntegrationSettings> {
-  return (
-    await apiClient.post<IntegrationSettings>("/api/settings/apikey", null, {
-      headers: authHeader(token),
-    })
-  ).data;
-}
-export async function revokeApiKey(
-  token: string,
-): Promise<IntegrationSettings> {
-  return (
-    await apiClient.delete<IntegrationSettings>("/api/settings/apikey", {
-      headers: authHeader(token),
-    })
-  ).data;
-}
-export async function testExternalConnection(
-  token: string,
-  payload: Partial<IntegrationSettings>,
-): Promise<ConnectionTestResult> {
-  return (
-    await apiClient.post<ConnectionTestResult>(
-      "/api/settings/test-connection",
-      payload,
-      { headers: authHeader(token) },
     )
   ).data;
 }

@@ -82,7 +82,7 @@ def corpus_hash(corpus: list[str]) -> str:
 
     canonical = "\n".join(sorted(text.strip() for text in corpus if text.strip()))
 
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()  # noqa: F821
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()  
 
 
 # Text utilities
@@ -204,13 +204,6 @@ def build_vocabulary(corpus: list[str]) -> list[str]:
 
 
 def text_to_vector(text: str, vocabulary: list[str] | None = None) -> list[float]:
-    """
-    Convert text to an L2-normalised term-frequency vector using the fitted
-    CountVectorizer.
-
-    The vocabulary parameter is kept only for backwards compatibility and
-    is ignored because the fitted vectorizer already stores the vocabulary.
-    """
     vector = vectorizer.transform([text])
 
     if vector.nnz == 0:
@@ -227,12 +220,6 @@ def euclidean_distance(v1: list[float], v2: list[float]) -> float:
 
 
 def normalise_vector(vector: list[float]) -> list[float]:
-    """
-    Project a detector candidate onto the unit hypersphere.
-
-    This ensures detector vectors and text vectors occupy
-    comparable L2-normalised feature space.
-    """
 
     magnitude = math.sqrt(sum(value * value for value in vector))
 
@@ -245,13 +232,7 @@ def normalise_vector(vector: list[float]) -> list[float]:
 # Data classes
 @dataclass
 class Detector:
-    """
-    A single NSA detector.
-
-    Represents a point in feature-vector space that lies OUTSIDE the self
-    region. Any input whose distance to this detector is <= radius triggers
-    a match (anomaly signal).
-    """
+    
 
     detector_id: int
     vector: list[float]
@@ -269,22 +250,15 @@ class Detector:
         )
 
     def matches(self, feature_vector: list[float]) -> float | None:
-        """
-        Return the Euclidean distance if this detector matches the vector,
-        otherwise return None.
-        """
+       
         dist = euclidean_distance(self.vector, feature_vector)
         return dist if dist <= self.radius else None
 
 
 @dataclass
 class NSAResult:
-    """Per-record output returned to the API layer."""
 
-    """ id: int
-    original_text: str
-    cleaned_text: str
-    tokens: list[str]
+    """ 
     nsa_status: str  # "Valid" | "Suspicious"
     anomaly_score: int  # 0–100
     anomaly_reason: str """
@@ -398,10 +372,7 @@ class NegativeSelectionAlgorithm:
         return normalise_vector(candidate)
 
     def _generate_detectors(self) -> None:
-        """
-        Accept a candidate only if its minimum distance to every self vector
-        exceeds/is more than the self_match_threshold (checking if it does NOT match self).
-        """
+        
         """ dimensions = len(self.vocabulary)
         if dimensions == 0:
             return """

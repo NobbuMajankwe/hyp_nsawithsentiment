@@ -53,7 +53,7 @@ from nsa import (
 )
 from pydantic import BaseModel
 
-# from sentiment import classify_sentiment
+from sentiment import classify_sentiment
 
 logger = logging.getLogger(__name__)
 
@@ -119,6 +119,10 @@ experiments_router = APIRouter(
 nsa_router = APIRouter(
     prefix="/api/nsa",
     tags=["NSA Configuration"],
+)
+sentiment_router = APIRouter(
+    prefix="/api/sentiment",
+    tags=["Sentiment Analysis"],
 )
 
 
@@ -1431,8 +1435,68 @@ def experiment_research_summary(
     }
 
 
+class SentimentAnalyseRequest(BaseModel):
+    texts: list[str]
+
+
+class SentimentItemOut(BaseModel):
+    id: int
+    originalText: str
+    label: str
+    confidence: float
+    model: str
+
+
+class SentimentAnalysisResponse(BaseModel):
+    totalRecords: int
+    positiveCount: int
+    negativeCount: int
+    neutralCount: int
+    results: list[SentimentItemOut]
+
+
+@sentiment_router.post(
+    "/analyse",
+    response_model=SentimentAnalysisResponse,
+)
+def analyse_sentiment(
+    body: SentimentAnalyseRequest,
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+):
+    texts = [t for t in body.texts if t and t.strip()]
+    if not texts:
+        raise HTTPException(
+            status_code=422,
+            detail="No non-empty texts were provided.",
+        )
+
+    try:
+        raw = classify_sentiment(texts)
+    except (RuntimeError, TypeError, ValueError) as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    results = [
+        SentimentItemOut(
+            id=index + 1,
+            originalText=result.text,
+            label=result.label,
+            confidence=result.confidence,
+            model=result.model,
+        )
+        for index, result in enumerate(raw)
+    ]
+
+    return SentimentAnalysisResponse(
+        totalRecords=len(results),
+        positiveCount=sum(1 for r in results if r.label == "Positive"),
+        negativeCount=sum(1 for r in results if r.label == "Negative"),
+        neutralCount=sum(1 for r in results if r.label == "Neutral"),
+        results=results,
+    )
+
+
 app.include_router(auth_router)
 app.include_router(datasets_router)
 app.include_router(nsa_router)
-# app.include_router(sentiment_router)
+app.include_router(sentiment_router)
 app.include_router(experiments_router)
