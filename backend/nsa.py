@@ -32,7 +32,7 @@ NSA_DEFAULT_RANDOM_SEED = 42
 # Run once
 nltk.download("punkt")
 nltk.download("stopwords")
-# added stemming
+# added lemmatisation
 lemmatizer = WordNetLemmatizer()
 
 

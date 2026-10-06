@@ -211,12 +211,7 @@ def parse_csv_file(
             raise DatasetParseError("CSV file is empty or has no headers.")
 
         # Remove empty/blank headers.
-        #
-        # The SMS spam CSV contains:
-        #
-        # v1,v2,,,
-        #
-        # We only want meaningful column names.
+        
         fieldnames = [
             str(field).strip()
             for field in raw_fieldnames

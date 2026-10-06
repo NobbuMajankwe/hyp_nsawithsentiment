@@ -657,20 +657,6 @@ def run_experiment(
     max_attempts: int = 10_000,
     random_seed: int = 42,
 ) -> ExperimentSummary:
-    """
-    Execute a complete reproducible NSA experiment.
-
-    Workflow:
-
-        1. Load experiment dataset
-        2. Train/load NSA
-        3. Create experiment record
-        4. Save generated detector population
-        5. Run NSA on every record
-        6. Save record-level measurements
-        7. Calculate evaluation metrics when labelled
-        8. Update experiment summary
-    """
 
     experiment_started = time.perf_counter()
 
@@ -715,18 +701,14 @@ def run_experiment(
 
     try:
 
-        # ----------
         # Persist detector population
-        # ----------
 
         detector_map = save_detectors(
             experiment_id,
             nsa,
         )
 
-        # ----------
         # Detection
-        # ----------
 
         detection_started = time.perf_counter()
 
@@ -753,9 +735,7 @@ def run_experiment(
 
         detection_time_ms = (time.perf_counter() - detection_started) * 1000
 
-        # ----------
         # Aggregate NSA response
-        # ----------
 
         self_count = sum(result.classification == "SELF" for result in results)
 
@@ -775,9 +755,7 @@ def run_experiment(
             training_statistics=(nsa.training_statistics),
         )
 
-        # ----------
         # Save record-level results
-        # ----------
 
         save_experiment_results(
             experiment_id=(experiment_id),
@@ -787,9 +765,7 @@ def run_experiment(
             detection_times=(detection_times),
         )
 
-        # ----------
         # Evaluation
-        # ----------
 
         (
             confusion_matrix,
@@ -799,9 +775,7 @@ def run_experiment(
             results,
         )
 
-        # ----------
         # Complete experiment
-        # ----------
 
         total_execution_time_ms = (time.perf_counter() - experiment_started) * 1000
 
