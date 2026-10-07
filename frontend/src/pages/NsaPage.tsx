@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
@@ -48,6 +49,7 @@ const defaults: RunRequest = {
   selfMatchThreshold: 0.75,
   maxAttempts: 10000,
   randomSeed: 42,
+  selfCorpusDatasetId: null,
 };
 const parameters = [
   { key: "detectorCount",      label: "Detector count",       min: 1,     max: 5000,    step: 1     },
@@ -57,8 +59,10 @@ const parameters = [
 ] as const;
 type NumericField = (typeof parameters)[number]["key"] | "datasetId" | "randomSeed";
 
-function validate(form: RunRequest, candidates: Dataset[], hasSelf: boolean): string | null {
-  if (!hasSelf) return "Upload a SELF_CORPUS dataset before running an experiment.";
+function validate(form: RunRequest, candidates: Dataset[], selfCorpusDatasets: Dataset[]): string | null {
+  if (selfCorpusDatasets.length === 0) return "Upload a SELF_CORPUS dataset before running an experiment.";
+  if (selfCorpusDatasets.length > 1 && !form.selfCorpusDatasetId)
+    return "Choose which SELF corpus to train with.";
   if (!candidates.some((d) => d.id === form.datasetId)) return "Choose an evaluation or analysis dataset.";
   if (!form.experimentName.trim()) return "Enter an experiment name.";
   for (const { key, label, min, max, step } of parameters) {
@@ -94,9 +98,20 @@ export function NsaPage() {
     () => datasets.filter((d) => d.researchRole === "EVALUATION" || d.researchRole === "ANALYSIS"),
     [datasets],
   );
-  const hasSelf = datasets.some((d) => d.researchRole === "SELF_CORPUS");
+  const selfCorpusDatasets = useMemo(
+    () => datasets.filter((d) => d.researchRole === "SELF_CORPUS"),
+    [datasets],
+  );
+  const hasSelf = selfCorpusDatasets.length > 0;
   const selected = candidates.find((d) => d.id === form.datasetId);
-  const issue = validate(form, candidates, hasSelf);
+  const issue = validate(form, candidates, selfCorpusDatasets);
+
+  // Auto-select the only self corpus so the user doesn't have to pick
+  useEffect(() => {
+    if (selfCorpusDatasets.length === 1 && !form.selfCorpusDatasetId) {
+      setForm((p: any) => ({ ...p, selfCorpusDatasetId: selfCorpusDatasets[0].id }));
+    }
+  }, [selfCorpusDatasets]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function setNumber(key: NumericField, raw: string) {
     setForm((p: any) => ({ ...p, [key]: raw === "" ? NaN : Number(raw) }));
@@ -105,7 +120,7 @@ export function NsaPage() {
   async function handleRun(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!token || running) return;
-    const problem = validate(form, candidates, hasSelf);
+    const problem = validate(form, candidates, selfCorpusDatasets);
     if (problem) { setError(problem); return; }
     setRunning(true); setError("");
     try {
@@ -113,6 +128,8 @@ export function NsaPage() {
         ...form,
         experimentName: form.experimentName.trim(),
         experimentDescription: form.experimentDescription?.trim(),
+        // Resolve: if only one corpus exists and none is explicitly chosen, use it
+        selfCorpusDatasetId: form.selfCorpusDatasetId ?? selfCorpusDatasets[0]?.id ?? null,
       });
       navigate(`/experiments/${result.experimentId}`);
     } catch (cause) {
@@ -189,6 +206,26 @@ export function NsaPage() {
                     Experiment configuration
                   </Typography>
                 </Stack>
+
+                <TextField
+                  select required fullWidth label="Self corpus for training"
+                  value={form.selfCorpusDatasetId ?? ""}
+                  onChange={(e) => setForm((p: any) => ({ ...p, selfCorpusDatasetId: Number(e.target.value) || null }))}
+                  helperText={
+                    selfCorpusDatasets.length === 0
+                      ? "No SELF_CORPUS datasets available — upload one first."
+                      : selfCorpusDatasets.length === 1
+                      ? `Using: ${selfCorpusDatasets[0].name} · ${selfCorpusDatasets[0].totalRecords} records`
+                      : "Select which uploaded self corpus to train detectors with."
+                  }
+                  sx={FIELD_SX}
+                >
+                  {selfCorpusDatasets.map((d) => (
+                    <MenuItem key={d.id} value={d.id}>
+                      {d.name} · {d.totalRecords} records
+                    </MenuItem>
+                  ))}
+                </TextField>
 
                 <TextField
                   select required fullWidth label="Dataset to classify"

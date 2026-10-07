@@ -211,7 +211,7 @@ def parse_csv_file(
             raise DatasetParseError("CSV file is empty or has no headers.")
 
         # Remove empty/blank headers.
-        
+
         fieldnames = [
             str(field).strip()
             for field in raw_fieldnames
@@ -1285,6 +1285,64 @@ def load_self_corpus() -> list[str]:
     if not records:
 
         raise RuntimeError("The SELF corpus contains " "no feedback records.")
+
+    return [row["raw_text"] for row in records]
+
+
+def load_self_corpus_by_id(dataset_id: int) -> list[str]:
+    """
+    Load raw text for a specific SELF_CORPUS dataset by its ID.
+
+    Unlike load_self_corpus() which always picks the most-recently-uploaded
+    SELF_CORPUS dataset, this function lets the caller choose exactly which
+    uploaded self corpus to use for training.
+
+    Raises:
+        ValueError: if the dataset does not exist or is not a SELF_CORPUS.
+        RuntimeError: if the dataset has no feedback records.
+    """
+
+    with get_cursor() as cur:
+
+        cur.execute(
+            """
+            SELECT dataset_id, research_role
+            FROM datasets
+            WHERE dataset_id = %s
+            LIMIT 1
+            """,
+            (dataset_id,),
+        )
+
+        dataset = cur.fetchone()
+
+    if not dataset:
+        raise ValueError(f"Dataset {dataset_id} was not found.")
+
+    if dataset["research_role"] != "SELF_CORPUS":
+        raise ValueError(
+            f"Dataset {dataset_id} has role "
+            f"'{dataset['research_role']}', not 'SELF_CORPUS'."
+        )
+
+    with get_cursor() as cur:
+
+        cur.execute(
+            """
+            SELECT raw_text
+            FROM feedback_records
+            WHERE dataset_id = %s
+            ORDER BY feedback_id
+            """,
+            (dataset_id,),
+        )
+
+        records = cur.fetchall()
+
+    if not records:
+        raise RuntimeError(
+            f"SELF_CORPUS dataset {dataset_id} contains no feedback records."
+        )
 
     return [row["raw_text"] for row in records]
 

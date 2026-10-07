@@ -239,6 +239,8 @@ class RunExperimentRequest(BaseModel):
 
     randomSeed: int = NSA_DEFAULT_RANDOM_SEED
 
+    selfCorpusDatasetId: int | None = None
+
 
 @app.get("/")
 def health_check() -> dict[str, str]:
@@ -1179,6 +1181,7 @@ def start_experiment(
             self_match_threshold=(body.selfMatchThreshold),
             max_attempts=(body.maxAttempts),
             random_seed=(body.randomSeed),
+            self_corpus_dataset_id=(body.selfCorpusDatasetId),
         )
 
     except ValueError as exc:

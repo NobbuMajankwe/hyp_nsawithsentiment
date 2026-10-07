@@ -261,6 +261,7 @@ export interface RunRequest {
   selfMatchThreshold: number;
   maxAttempts: number;
   randomSeed: number;
+  selfCorpusDatasetId?: number | null;
 }
 export type RunExperimentRequest = RunRequest;
 export interface EvaluationMetrics {

@@ -12,6 +12,7 @@ from nsa import (
     NSAResult,
     get_nsa,
 )
+from dataset_handler import load_self_corpus_by_id
 
 logger = logging.getLogger(__name__)
 
@@ -81,18 +82,6 @@ def calculate_confusion_matrix(
     ground_truth: list[str],
     predictions: list[str],
 ) -> ConfusionMatrix:
-    """
-    Calculate the confusion matrix.
-
-    NON_SELF is treated as the positive class.
-
-    SELF     -> negative class
-    NON_SELF -> positive class
-
-    OOV predictions are treated as NON_SELF for
-    binary evaluation because the system was unable
-    to represent the input as SELF.
-    """
 
     if len(ground_truth) != len(predictions):
         raise ValueError("Ground truth and prediction lengths do not match.")
@@ -656,6 +645,7 @@ def run_experiment(
     self_match_threshold: float = 0.75,
     max_attempts: int = 10_000,
     random_seed: int = 42,
+    self_corpus_dataset_id: int | None = None,
 ) -> ExperimentSummary:
 
     experiment_started = time.perf_counter()
@@ -673,10 +663,18 @@ def run_experiment(
 
     # Training dataset
 
-    training_dataset_id = get_self_dataset_id()
+    if self_corpus_dataset_id is not None:
+        # Use the caller-supplied self corpus dataset.
+        training_dataset_id = self_corpus_dataset_id
+        training_corpus = load_self_corpus_by_id(self_corpus_dataset_id)
+    else:
+        # Fall back to the most-recently-uploaded SELF_CORPUS dataset.
+        training_dataset_id = get_self_dataset_id()
 
-    if training_dataset_id is None:
-        raise RuntimeError("No SELF_CORPUS dataset has " "been configured.")
+        if training_dataset_id is None:
+            raise RuntimeError("No SELF_CORPUS dataset has " "been configured.")
+
+        training_corpus = None  # get_nsa() will load it internally
 
     # NSA
 
@@ -686,6 +684,7 @@ def run_experiment(
         self_match_threshold=(self_match_threshold),
         max_attempts=max_attempts,
         random_seed=random_seed,
+        corpus=training_corpus,
     )
 
     # Experiment metadata

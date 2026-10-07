@@ -38,7 +38,6 @@ lemmatizer = WordNetLemmatizer()
 
 # Helper function to load normal corpus from database
 def load_normal_corpus_from_db() -> list[str]:
-   
 
     with get_cursor() as cur:
         cur.execute(
@@ -598,13 +597,21 @@ def get_nsa(
     self_match_threshold: float = NSA_DEFAULT_SELF_MATCH_THRESHOLD,
     max_attempts: int = NSA_DEFAULT_MAX_ATTEMPTS,
     random_seed: int = NSA_DEFAULT_RANDOM_SEED,
+    corpus: list[str] | None = None,
 ) -> NegativeSelectionAlgorithm:
     """
     Return a trained NSA instance for the given parameters.
-    Instances are cached by (detector_count, detector_radius, self_match_threshold)
-    so a re-train is only triggered when the config actually changes.
+    Instances are cached so a re-train is only triggered when the
+    corpus content or any parameter actually changes.
+
+    Args:
+        corpus: Optional pre-loaded self corpus texts.  When supplied the
+                caller is responsible for loading them (e.g. from a
+                user-uploaded SELF_CORPUS dataset).  When omitted the
+                legacy NORMAL_FEEDBACK_SAMPLES corpus is used as a
+                fallback so existing behaviour is preserved.
     """
-    normal_corpus = load_normal_corpus_from_db()
+    normal_corpus = corpus if corpus is not None else load_normal_corpus_from_db()
 
     training_corpus_hash = corpus_hash(normal_corpus)
 
