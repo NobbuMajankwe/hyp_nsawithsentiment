@@ -40,7 +40,7 @@ TEXT_FIELD_NAMES = (
     "v2",
 )
 
-LABEL_FIELD_NAMES = ("label", "ground_truth", "target", "class", "category", "v1", "id")
+LABEL_FIELD_NAMES = ("label", "ground_truth", "target", "class", "category", "v1", "id", "class")
 
 VALID_RESEARCH_ROLES = {
     "SELF_CORPUS",
@@ -120,6 +120,8 @@ def _normalise_ground_truth(
         "SELF": "SELF",
         "NORMAL": "SELF",
         "HAM": "SELF",
+        "1":"NON_SELF",
+        "0": "SELF",
         "NON_SELF": "NON_SELF",
         "NONSELF": "NON_SELF",
         "ANOMALY": "NON_SELF",
