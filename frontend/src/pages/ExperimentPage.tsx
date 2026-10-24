@@ -63,7 +63,7 @@ function msg(error: unknown): string {
 
 const predictionColumns: Column[] = [
   { label: "Record",   keys: ["record_index", "recordIndex", "id"] },
-  { label: "Feedback", keys: ["original_text", "originalText", "text"] },
+  { label: "Comment", keys: ["original_text", "originalText", "text"] },
   { label: "Ground truth", keys: ["ground_truth_label", "groundTruthLabel"] },
   { label: "Prediction",   keys: ["predicted_class", "predictedClass"] },
   { label: "Nearest self dist.",     keys: ["nearest_self_distance", "nearestSelfDistance"],     numeric: true },
@@ -370,6 +370,15 @@ export default function ExperimentPage() {
                     ["Self match threshold", parameters.selfMatchThreshold],
                     ["Maximum attempts",    parameters.maxAttempts],
                     ["Random seed",         parameters.randomSeed],
+                  ]}
+                />
+                <ValuesCard
+                  title="Word2Vec parameters"
+                  items={[
+                    ["Vector size", parameters.word2vecVectorSize],
+                    ["Window size", parameters.word2vecWindow],
+                    ["Minimum word count", parameters.word2vecMinCount],
+                    ["Training epochs", parameters.word2vecEpochs],
                   ]}
                 />
                 <ValuesCard

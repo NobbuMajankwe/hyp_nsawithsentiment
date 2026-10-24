@@ -65,6 +65,7 @@ class ExperimentSummary:
     detector_generation_attempts: int
     detector_acceptance_rate: float
 
+    text_representation: str
     word2vec_vector_size: int
     word2vec_window: int
     word2vec_min_count: int
@@ -948,6 +949,7 @@ def run_experiment(
             detector_acceptance_rate=(
                 nsa.training_statistics.detector_acceptance_rate
             ),
+            text_representation="WORD2VEC",
             word2vec_vector_size=nsa.word2vec_vector_size,
             word2vec_window=nsa.word2vec_window,
             word2vec_min_count=nsa.word2vec_min_count,

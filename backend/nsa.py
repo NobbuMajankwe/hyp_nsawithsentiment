@@ -10,10 +10,12 @@ from dataclasses import dataclass
 from typing import Any
 
 from database import get_cursor
+from nltk.corpus import stopwords as nltk_stopwords
 from nltk.stem import WordNetLemmatizer
 
 
 # Default NSA parameters
+
 
 NSA_DEFAULT_DETECTOR_COUNT = 200
 NSA_DEFAULT_DETECTOR_RADIUS = 0.20
@@ -88,38 +90,23 @@ def corpus_hash(corpus: list[str]) -> str:
 # Text preprocessing
 
 
+def load_stopwords_from_library() -> set[str]:
+    """Load the standard English stopword list from NLTK.
+
+    Stopwords are no longer read from STOP_WORDS_SAMPLES in the database.
+    """
+    try:
+        return {word.lower() for word in nltk_stopwords.words("english")}
+    except LookupError as exc:
+        raise RuntimeError(
+            "NLTK stopwords data is missing. Run:\n"
+            "python -m nltk.downloader stopwords wordnet omw-1.4"
+        ) from exc
+
+
 def load_stopwords_from_db() -> set[str]:
-    with get_cursor() as cur:
-        cur.execute(
-            """
-            SELECT dataset_id
-            FROM datasets
-            WHERE source_name = 'STOP_WORDS_SAMPLES'
-              AND source_type = 'JSON'
-            ORDER BY loaded_at DESC
-            LIMIT 1
-            """
-        )
-        dataset = cur.fetchone()
-
-        if not dataset:
-            return set()
-
-        cur.execute(
-            """
-            SELECT raw_text
-            FROM feedback_records
-            WHERE dataset_id = %s
-            """,
-            (dataset["dataset_id"],),
-        )
-        rows = cur.fetchall()
-
-    return {
-        str(row["raw_text"]).strip().lower()
-        for row in rows
-        if row["raw_text"] and str(row["raw_text"]).strip()
-    }
+    """Backward-compatible alias; no database query is performed."""
+    return load_stopwords_from_library()
 
 
 def preprocess(text: str) -> str:
@@ -166,7 +153,7 @@ def tokenise(text: str) -> list[str]:
     NSA instances cache their stop-word set so preprocessing does not query
     the database for every comment.
     """
-    return _tokenise_with_stopwords(text, load_stopwords_from_db())
+    return _tokenise_with_stopwords(text, load_stopwords_from_library())
 
 
 # Vector / distance helpers
@@ -319,8 +306,9 @@ class NegativeSelectionAlgorithm:
         self.training_statistics: TrainingStatistics | None = None
         self.word2vec_model: Any | None = None
 
-        # Each NSA instance owns its own preprocessing/vectorisation state.
-        self.stop_words = load_stopwords_from_db()
+        # Use the standard NLTK English stopword list. No stopwords are
+        # loaded from STOP_WORDS_SAMPLES or any other database table.
+        self.stop_words: set[str] = load_stopwords_from_library()
         self._rnd = _rnd.Random(random_seed)
 
     # ------------------------------------------------------------------
@@ -663,6 +651,7 @@ class NegativeSelectionAlgorithm:
 
 
 # Model cache
+
 
 _nsa_cache: dict[tuple, NegativeSelectionAlgorithm] = {}
 
