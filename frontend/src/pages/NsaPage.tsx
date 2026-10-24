@@ -461,7 +461,7 @@ export function NsaPage() {
                   </Box>
                 </Box>
 
-                <Box>
+                <Box >
                   <Typography
                     variant="body2"
                     sx={{ color: "#94a3b8", fontFamily: MONO, mb: 1.5 }}

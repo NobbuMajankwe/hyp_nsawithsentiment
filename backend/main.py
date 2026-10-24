@@ -515,14 +515,8 @@ def _validate_nsa_parameters(
     word2vec_min_count: int = WORD2VEC_DEFAULT_MIN_COUNT,
     word2vec_epochs: int = WORD2VEC_DEFAULT_EPOCHS,
 ) -> None:
-    """
-    Validate NSA parameters used by both configuration and experiment routes.
-
-    nsa.py uses cosine distance on non-negative L2-normalised vectors, so
-    detector radius and SELF-match threshold are constrained to (0, 1].
-    The SELF-match threshold must also be at least as large as the detector
-    radius so an accepted detector does not immediately overlap known SELF.
-    """
+    # Validate NSA parameters for config and experiment routes.
+    # Radius and threshold must be in (0, 1]; threshold must be >= radius.
 
     if not (1 <= detector_count <= 5000):
         raise HTTPException(
@@ -546,8 +540,7 @@ def _validate_nsa_parameters(
         raise HTTPException(
             status_code=422,
             detail=(
-                "selfMatchThreshold must be greater than or equal to "
-                "detectorRadius."
+                "selfMatchThreshold must be greater than or equal to " "detectorRadius."
             ),
         )
 
@@ -686,28 +679,10 @@ async def upload_dataset(
     ] = Form("ANALYSIS"),
     current_user: dict = Depends(get_current_user),  # noqa: B008
 ):
-    """
-    Upload a research dataset.
-
-    Behaviour by role:
-
-    SELF_CORPUS
-        - Labelled CSV/JSON:
-          preserve SELF/NON_SELF labels in the database.
-          NSA training later uses only SELF-labelled rows.
-        - Truly unlabelled CSV/JSON:
-          save all rows unlabelled and treat the entire corpus as SELF.
-
-    EVALUATION
-        - Must be labelled.
-        - Labels are preserved for confusion-matrix metrics.
-
-    ANALYSIS
-        - Unlabelled data used for model application/analysis.
-
-    SUPPORT
-        - Supporting unlabelled data such as stop-word lists.
-    """
+    # Upload a research dataset.
+    # SELF_CORPUS: save with optional labels, all unlabelled rows treated as SELF.
+    # EVALUATION: must be labelled for confusion-matrix metrics.
+    # ANALYSIS / SUPPORT: unlabelled only.
 
     user_id = int(current_user["sub"])
 
@@ -743,11 +718,7 @@ async def upload_dataset(
             detail="File too large. Maximum size is 100MB.",
         )
 
-    dataset_name = (
-        name.strip()
-        if name and name.strip()
-        else file.filename
-    )
+    dataset_name = name.strip() if name and name.strip() else file.filename
 
     labelled_records: list[dict[str, str]] | None = None
     feedback_texts: list[str] | None = None
@@ -815,21 +786,15 @@ async def upload_dataset(
                 research_role=researchRole,
             )
 
-            self_count = sum(
-                record["label"] == "SELF"
-                for record in labelled_records
-            )
+            self_count = sum(record["label"] == "SELF" for record in labelled_records)
             non_self_count = sum(
-                record["label"] == "NON_SELF"
-                for record in labelled_records
+                record["label"] == "NON_SELF" for record in labelled_records
             )
             total_records = len(labelled_records)
 
         else:
             if feedback_texts is None:
-                raise RuntimeError(
-                    "Dataset parsing produced no records."
-                )
+                raise RuntimeError("Dataset parsing produced no records.")
 
             dataset_id = save_dataset_to_db(
                 user_id=user_id,
@@ -886,11 +851,8 @@ async def upload_labelled_dataset(
     description: str | None = Form(None),
     current_user: dict = Depends(get_current_user),  # noqa: B008
 ):
-    """
-    Backward-compatible labelled EVALUATION upload endpoint.
-
-    New code may use /api/datasets/upload with researchRole=EVALUATION.
-    """
+    # Backward-compatible labelled EVALUATION upload.
+    # New code should use /api/datasets/upload with researchRole=EVALUATION.
 
     user_id = int(current_user["sub"])
 
@@ -909,9 +871,7 @@ async def upload_labelled_dataset(
     else:
         raise HTTPException(
             status_code=400,
-            detail=(
-                "A labelled evaluation dataset must be CSV or JSON."
-            ),
+            detail=("A labelled evaluation dataset must be CSV or JSON."),
         )
 
     try:
@@ -939,11 +899,7 @@ async def upload_labelled_dataset(
             detail=str(exc),
         ) from exc
 
-    dataset_name = (
-        name.strip()
-        if name and name.strip()
-        else file.filename
-    )
+    dataset_name = name.strip() if name and name.strip() else file.filename
 
     try:
         dataset_id = save_labelled_dataset_to_db(
@@ -967,14 +923,8 @@ async def upload_labelled_dataset(
             detail=f"Failed to save labelled dataset: {exc}",
         ) from exc
 
-    self_count = sum(
-        record["label"] == "SELF"
-        for record in records
-    )
-    non_self_count = sum(
-        record["label"] == "NON_SELF"
-        for record in records
-    )
+    self_count = sum(record["label"] == "SELF" for record in records)
+    non_self_count = sum(record["label"] == "NON_SELF" for record in records)
 
     return {
         "message": "Labelled evaluation dataset uploaded successfully.",
@@ -1441,10 +1391,7 @@ def _get_completed_experiment_for_sentiment(
     experiment_id: int,
     user_id: int,
 ) -> dict:
-    """
-    Load an experiment owned by the current user and make sure NSA
-    classification completed before sentiment analysis starts.
-    """
+    # Load a completed experiment owned by the user for sentiment analysis.
 
     experiment = get_experiment(
         experiment_id,
@@ -1472,16 +1419,8 @@ def _get_completed_experiment_for_sentiment(
 def _load_self_experiment_results(
     experiment_id: int,
 ) -> list[dict]:
-    """
-    Return only records the NSA predicted as SELF.
-
-    Important:
-        Filtering uses predicted_class, not ground_truth_label.
-
-        The hybrid pipeline must operate on what the NSA actually accepted.
-        Ground truth may be displayed for evaluation datasets but must not be
-        used to decide which records DistilBERT receives.
-    """
+    # Return only records the NSA predicted as SELF.
+    # Filters by predicted_class, not ground_truth_label.
 
     with get_cursor() as cur:
         cur.execute(
@@ -1513,9 +1452,7 @@ def _load_self_experiment_results(
 def sentiment_model_status(
     current_user: dict = Depends(get_current_user),  # noqa: B008
 ):
-    """
-    Return pinned model metadata without forcing model inference.
-    """
+    # Return pinned model metadata without forcing model inference.
 
     return get_sentiment_model_status()
 
@@ -1528,10 +1465,7 @@ def sentiment_experiment_eligibility(
     experiment_id: int,
     current_user: dict = Depends(get_current_user),  # noqa: B008
 ):
-    """
-    Tell the frontend how many records are eligible for sentiment analysis
-    before the heavier DistilBERT inference call is made.
-    """
+    # Check how many records are eligible for sentiment before running DistilBERT.
 
     user_id = int(current_user["sub"])
 
@@ -1540,24 +1474,16 @@ def sentiment_experiment_eligibility(
         user_id,
     )
 
-    eligible_records = _load_self_experiment_results(
-        experiment_id
-    )
+    eligible_records = _load_self_experiment_results(experiment_id)
 
     return SentimentEligibilityResponse(
         experimentId=experiment_id,
         experimentName=experiment["experiment_name"],
         status=experiment["status"],
-        totalExperimentRecords=int(
-            experiment["total_records"] or 0
-        ),
+        totalExperimentRecords=int(experiment["total_records"] or 0),
         eligibleSelfRecords=len(eligible_records),
-        excludedNonSelfRecords=int(
-            experiment["non_self_count"] or 0
-        ),
-        excludedOovRecords=int(
-            experiment["oov_count"] or 0
-        ),
+        excludedNonSelfRecords=int(experiment["non_self_count"] or 0),
+        excludedOovRecords=int(experiment["oov_count"] or 0),
     )
 
 
@@ -1569,21 +1495,8 @@ def analyse_experiment_sentiment(
     experiment_id: int,
     current_user: dict = Depends(get_current_user),  # noqa: B008
 ):
-    """
-    Run DistilBERT sentiment analysis on NSA-validated feedback only.
-
-    Pipeline:
-
-        completed NSA experiment
-                ↓
-        predicted_class = SELF
-                ↓
-        DistilBERT
-                ↓
-        Positive / Neutral / Negative
-
-    NON_SELF and OOV records are deliberately excluded from sentiment.
-    """
+    # Run DistilBERT on NSA-validated (SELF) feedback only.
+    # NON_SELF and OOV records are excluded.
 
     user_id = int(current_user["sub"])
 
@@ -1592,9 +1505,7 @@ def analyse_experiment_sentiment(
         user_id,
     )
 
-    eligible_records = _load_self_experiment_results(
-        experiment_id
-    )
+    eligible_records = _load_self_experiment_results(experiment_id)
 
     if not eligible_records:
         raise HTTPException(
@@ -1605,10 +1516,7 @@ def analyse_experiment_sentiment(
             ),
         )
 
-    texts = [
-        str(record["original_text"]).strip()
-        for record in eligible_records
-    ]
+    texts = [str(record["original_text"]).strip() for record in eligible_records]
 
     if any(not text for text in texts):
         raise HTTPException(
@@ -1620,9 +1528,7 @@ def analyse_experiment_sentiment(
         )
 
     try:
-        sentiment_results = classify_sentiment(
-            texts
-        )
+        sentiment_results = classify_sentiment(texts)
 
     except (RuntimeError, TypeError, ValueError) as exc:
         raise HTTPException(
@@ -1663,35 +1569,20 @@ def analyse_experiment_sentiment(
             )
         )
 
-    positive_count = sum(
-        result.label == "Positive"
-        for result in results
-    )
+    positive_count = sum(result.label == "Positive" for result in results)
 
-    negative_count = sum(
-        result.label == "Negative"
-        for result in results
-    )
+    negative_count = sum(result.label == "Negative" for result in results)
 
-    neutral_count = sum(
-        result.label == "Neutral"
-        for result in results
-    )
+    neutral_count = sum(result.label == "Neutral" for result in results)
 
     return ExperimentSentimentResponse(
         experimentId=experiment_id,
         experimentName=experiment["experiment_name"],
         datasetId=int(experiment["dataset_id"]),
-        totalExperimentRecords=int(
-            experiment["total_records"] or 0
-        ),
+        totalExperimentRecords=int(experiment["total_records"] or 0),
         eligibleSelfRecords=len(eligible_records),
-        excludedNonSelfRecords=int(
-            experiment["non_self_count"] or 0
-        ),
-        excludedOovRecords=int(
-            experiment["oov_count"] or 0
-        ),
+        excludedNonSelfRecords=int(experiment["non_self_count"] or 0),
+        excludedOovRecords=int(experiment["oov_count"] or 0),
         analysedRecords=len(results),
         positiveCount=positive_count,
         negativeCount=negative_count,
