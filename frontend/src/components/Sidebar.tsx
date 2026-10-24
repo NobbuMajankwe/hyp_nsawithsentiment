@@ -1,11 +1,5 @@
-/**
- * Sidebar — vertical navigation for EventSense AI.
- *
- * Renders a fixed-width sidebar with:
- *  - Logo + brand name at the top
- *  - Nav links in the middle
- *  - Sign-out at the bottom
- */
+// Vertical navigation sidebar for EventSense AI.
+// Shows logo at top, nav links in the middle, and sign-out at the bottom.
 
 import { NavLink } from 'react-router-dom';
 import {
@@ -41,7 +35,7 @@ const NAV_LINKS = [
   { label: 'Profile',       path: '/profile',    Icon: User         },
 ] as const;
 
-/** The actual drawer content — shared by mobile + desktop. */
+// Drawer content — shared by mobile and desktop.
 function SidebarContent() {
   const { user, logout } = useAuth();
 
@@ -210,11 +204,7 @@ function SidebarContent() {
   );
 }
 
-/**
- * Sidebar component.
- * Always rendered as a permanent `Drawer` — no toggle needed on desktop.
- * On mobile it renders as a `temporary` drawer (pass `open` + `onClose`).
- */
+// Permanent sidebar drawer. Renders as a temporary drawer on mobile.
 export function Sidebar() {
   return (
     <Drawer

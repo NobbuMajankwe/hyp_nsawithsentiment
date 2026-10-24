@@ -16,10 +16,8 @@ export const PIPELINE_STEPS: PipelineStep[] = [
   { step: '04', label: 'Insight Story', desc: 'Narrative report generated' },
 ];
 
-/**
- * Build a steps array with one step marked active.
- * Steps before `activeIndex` (0-based) are automatically marked done.
- */
+// Build a steps array with one step marked active.
+// Steps before activeIndex (0-based) are marked done.
 export function buildSteps(
   activeIndex: number,
   overrides: Partial<PipelineStep>[] = [],

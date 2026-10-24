@@ -1,18 +1,15 @@
-/**
- * PageHero — shared dark-themed hero banner used across NSA, Sentiment,
- * and InsightStory pages.
- *
- * Props:
- *   icon        — lucide icon node shown in the icon box
- *   iconColor   — glow / accent colour for the icon box border + shadow
- *   accentColor — used for the radial gradient blob at top-right
- *   badge       — text shown in the top Chip (e.g. "$ nsa_engine --active")
- *   badgeIcon   — optional icon inside the chip
- *   title       — main heading (rendered verbatim, can include JSX)
- *   description — subtitle paragraph
- *   chips       — optional array of function-call strings shown as code chips
- *   statusLine  — optional status line at the bottom (plain string)
- */
+// Shared dark hero banner used across NSA, Sentiment, and InsightStory pages.
+//
+// Props:
+//   icon        — lucide icon shown in the icon box
+//   iconColor   — accent color for the icon box border and shadow
+//   accentColor — radial gradient blob color at top-right (defaults to iconColor)
+//   badge       — text shown in the top chip
+//   badgeIcon   — optional icon inside the chip
+//   title       — main heading (string or JSX)
+//   description — subtitle paragraph
+//   chips       — optional array of code chip strings
+//   statusLine  — optional status line at the bottom
 
 import { Box, Chip, Paper, Stack, Typography } from '@mui/material';
 import type { ReactNode } from 'react';
