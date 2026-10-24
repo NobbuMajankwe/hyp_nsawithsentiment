@@ -13,17 +13,30 @@ from database import get_cursor
 from nltk.corpus import stopwords as nltk_stopwords
 from nltk.stem import WordNetLemmatizer
 
+try:
+    from langdetect import DetectorFactory, LangDetectException, detect_langs
+except ImportError:  # handled with a clear runtime error below
+    DetectorFactory = None
+    LangDetectException = Exception
+    detect_langs = None
 
+if DetectorFactory is not None:
+    # langdetect is non-deterministic by default; fixing the seed makes
+    # experiment results reproducible.
+    DetectorFactory.seed = 0
+
+
+# ---------------------------------------------------------------------------
 # Default NSA parameters
+# ---------------------------------------------------------------------------
 
-
-NSA_DEFAULT_DETECTOR_COUNT = 200
-NSA_DEFAULT_DETECTOR_RADIUS = 0.20
-NSA_DEFAULT_SELF_MATCH_THRESHOLD = 0.30
-NSA_DEFAULT_MAX_ATTEMPTS = 10_000
+NSA_DEFAULT_DETECTOR_COUNT = 1000
+NSA_DEFAULT_DETECTOR_RADIUS = 0.60
+NSA_DEFAULT_SELF_MATCH_THRESHOLD = 0.70
+NSA_DEFAULT_MAX_ATTEMPTS = 50_000
 NSA_DEFAULT_RANDOM_SEED = 42
 
-WORD2VEC_DEFAULT_VECTOR_SIZE = 100
+WORD2VEC_DEFAULT_VECTOR_SIZE = 50
 WORD2VEC_DEFAULT_WINDOW = 5
 WORD2VEC_DEFAULT_MIN_COUNT = 1
 WORD2VEC_DEFAULT_EPOCHS = 50
@@ -31,7 +44,9 @@ WORD2VEC_DEFAULT_EPOCHS = 50
 lemmatizer = WordNetLemmatizer()
 
 
+# ---------------------------------------------------------------------------
 # Corpus helpers
+# ---------------------------------------------------------------------------
 
 
 def load_normal_corpus_from_db() -> list[str]:
@@ -87,7 +102,9 @@ def corpus_hash(corpus: list[str]) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
+# ---------------------------------------------------------------------------
 # Text preprocessing
+# ---------------------------------------------------------------------------
 
 
 def load_stopwords_from_library() -> set[str]:
@@ -156,7 +173,45 @@ def tokenise(text: str) -> list[str]:
     return _tokenise_with_stopwords(text, load_stopwords_from_library())
 
 
+def detect_comment_language(text: str) -> tuple[str, float]:
+    """Detect the dominant language of a comment.
+
+    Only confident non-English detections are used for OOV classification.
+    Short or uncertain comments return UNKNOWN so they continue through the
+    normal Word2Vec/NSA path rather than being incorrectly rejected.
+    """
+    if detect_langs is None:
+        raise RuntimeError(
+            "Language detection requires 'langdetect'. Install it with: "
+            "pip install langdetect"
+        )
+
+    candidate = str(text)
+    candidate = re.sub(r"https?://\S+|www\.\S+", " ", candidate)
+    candidate = re.sub(r"[@#]\w+", " ", candidate)
+    candidate = re.sub(r"[^A-Za-zÀ-ÖØ-öø-ÿ' ]+", " ", candidate)
+    candidate = re.sub(r"\s+", " ", candidate).strip()
+
+    # Language detectors are unreliable on very short text. Treat these as
+    # unknown and let the NSA make the decision instead.
+    if len(candidate.split()) < 3 or len(candidate.replace(" ", "")) < 12:
+        return "UNKNOWN", 0.0
+
+    try:
+        predictions = detect_langs(candidate)
+    except LangDetectException:
+        return "UNKNOWN", 0.0
+
+    if not predictions:
+        return "UNKNOWN", 0.0
+
+    best = predictions[0]
+    return str(best.lang).lower(), float(best.prob)
+
+
+# ---------------------------------------------------------------------------
 # Vector / distance helpers
+# ---------------------------------------------------------------------------
 
 
 def cosine_distance(v1: list[float], v2: list[float]) -> float:
@@ -186,7 +241,9 @@ def stable_word_hash(word: str) -> int:
     return int.from_bytes(digest[:8], byteorder="little", signed=False)
 
 
+# ---------------------------------------------------------------------------
 # Data classes
+# ---------------------------------------------------------------------------
 
 
 @dataclass
@@ -244,7 +301,9 @@ class NSAResponse:
     training_statistics: TrainingStatistics
 
 
+# ---------------------------------------------------------------------------
 # Negative Selection Algorithm
+# ---------------------------------------------------------------------------
 
 
 class NegativeSelectionAlgorithm:
@@ -542,12 +601,13 @@ class NegativeSelectionAlgorithm:
 
         cleaned = preprocess(text)
         tokens = self._tokenise(text)
-        feature_vector = self._text_to_vector(text)
-
         vocabulary_coverage, oov_ratio = self._vocabulary_statistics(text)
 
-        # OOV is kept separate from SELF and NON_SELF.
-        if all(value == 0.0 for value in feature_vector):
+        detected_language, language_confidence = detect_comment_language(text)
+
+        # In this project OOV is reserved for confidently detected non-English
+        # comments. Uncertain/short comments continue through the NSA path.
+        if detected_language not in {"en", "UNKNOWN"} and language_confidence >= 0.80:
             return NSAResult(
                 id=record_id,
                 original_text=text,
@@ -563,7 +623,35 @@ class NegativeSelectionAlgorithm:
                 vocabulary_coverage=vocabulary_coverage,
                 out_of_vocabulary_ratio=oov_ratio,
                 classification_reason=(
-                    "No recognised tokens exist in the SELF Word2Vec vocabulary."
+                    f"Detected non-English language '{detected_language}' "
+                    f"with confidence {language_confidence:.3f}."
+                ),
+            )
+
+        feature_vector = self._text_to_vector(text)
+
+        # An English/undetermined-language comment with no SELF vocabulary
+        # overlap is not OOV under the revised definition. It is maximally
+        # unfamiliar to the learned SELF corpus and is therefore NON_SELF.
+        if all(abs(value) < 1e-12 for value in feature_vector):
+            return NSAResult(
+                id=record_id,
+                original_text=text,
+                cleaned_text=cleaned,
+                tokens=tokens,
+                classification="NON_SELF",
+                anomaly_score=1.0,
+                nearest_self_distance=None,
+                nearest_detector_distance=None,
+                matched_detector_id=None,
+                detector_radius=self.detector_radius,
+                detector_margin=None,
+                vocabulary_coverage=vocabulary_coverage,
+                out_of_vocabulary_ratio=oov_ratio,
+                classification_reason=(
+                    "English or language-undetermined input has no recognised "
+                    "tokens in the SELF Word2Vec vocabulary, so it is treated "
+                    "as maximally unfamiliar NON_SELF text."
                 ),
             )
 
@@ -650,8 +738,9 @@ class NegativeSelectionAlgorithm:
         )
 
 
+# ---------------------------------------------------------------------------
 # Model cache
-
+# ---------------------------------------------------------------------------
 
 _nsa_cache: dict[tuple, NegativeSelectionAlgorithm] = {}
 
