@@ -212,7 +212,7 @@ function buildNarrative(d: NarrativeInput): NarrativeSection[] {
 
 // ─── sub-components ───────────────────────────────────────────────────────────
 
-/** Simple KPI card */
+// Simple KPI card
 function KpiCard({
   label,
   value,
@@ -263,7 +263,7 @@ function KpiCard({
   );
 }
 
-/** Animated gauge ring for the health score */
+// Animated gauge ring for the health score
 function HealthGauge({ score }: { score: number }) {
   const color = score >= 75 ? "#22c55e" : score >= 50 ? "#f59e0b" : "#ef4444";
   const r = 42;
@@ -339,7 +339,7 @@ function HealthGauge({ score }: { score: number }) {
   );
 }
 
-/** Horizontal sentiment bar */
+// Horizontal sentiment bar
 function SentimentBar({
   label,
   count,
@@ -391,7 +391,7 @@ function SentimentBar({
   );
 }
 
-/** Anomaly breakdown card */
+// Anomaly breakdown card
 function AnomalyBreakdown({
   total,
   self,
@@ -472,7 +472,7 @@ function AnomalyBreakdown({
   );
 }
 
-/** Sentiment distribution card with bars */
+// Sentiment distribution card with bars
 function SentimentBreakdown({
   total,
   positive,
@@ -552,7 +552,7 @@ function SentimentBreakdown({
   );
 }
 
-/** Signal quality card */
+// Signal quality card
 function SignalQualityCard({
   healthScore,
   anomalyRate,
@@ -639,7 +639,7 @@ function SignalQualityCard({
   );
 }
 
-/** Per-record sentiment list */
+// Per-record sentiment list
 const SENTIMENT_TONE: Record<SentimentLabel, "success" | "error" | "warning"> =
   {
     Positive: "success",
@@ -726,7 +726,7 @@ function ClassifiedRecords({
   );
 }
 
-/** Export / share card */
+// Export / share card
 function ExportCard({
   experimentName,
   generatedAt,

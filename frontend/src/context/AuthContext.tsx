@@ -1,10 +1,5 @@
-/**
- * AuthContext — thin wrapper around the Redux auth slice.
- *
- * Components that already import useAuth() keep working unchanged.
- * Under the hood, login/logout dispatch to the Redux store so the
- * auth state is accessible both via context and via useAppSelector.
- */
+// Thin wrapper around the Redux auth slice.
+// Components that use useAuth() keep working. Login/logout dispatch to the Redux store.
 import {
   createContext,
   useCallback,
