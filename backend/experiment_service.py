@@ -7,6 +7,11 @@ from dataclasses import dataclass
 
 from database import get_cursor
 from nsa import (
+    NSA_DEFAULT_DETECTOR_COUNT,
+    NSA_DEFAULT_DETECTOR_RADIUS,
+    NSA_DEFAULT_MAX_ATTEMPTS,
+    NSA_DEFAULT_RANDOM_SEED,
+    NSA_DEFAULT_SELF_MATCH_THRESHOLD,
     NegativeSelectionAlgorithm,
     NSAResponse,
     NSAResult,
@@ -92,25 +97,25 @@ def calculate_confusion_matrix(
         ground_truth,
         predictions,
     ):
-
-        if truth not in {
-            "SELF",
-            "NON_SELF",
-        }:
+        if truth not in {"SELF", "NON_SELF"}:
             continue
 
-        binary_prediction = "NON_SELF" if prediction == "OOV" else prediction
+        if prediction == "OOV":
+            continue
 
-        if truth == "NON_SELF" and binary_prediction == "NON_SELF":
+        if prediction not in {"SELF", "NON_SELF"}:
+            continue
+
+        if truth == "NON_SELF" and prediction == "NON_SELF":
             matrix.true_positive += 1
 
-        elif truth == "SELF" and binary_prediction == "SELF":
+        elif truth == "SELF" and prediction == "SELF":
             matrix.true_negative += 1
 
-        elif truth == "SELF" and binary_prediction == "NON_SELF":
+        elif truth == "SELF" and prediction == "NON_SELF":
             matrix.false_positive += 1
 
-        elif truth == "NON_SELF" and binary_prediction == "SELF":
+        elif truth == "NON_SELF" and prediction == "SELF":
             matrix.false_negative += 1
 
     return matrix
@@ -235,30 +240,6 @@ def get_dataset_info(
     return dataset
 
 
-def get_self_dataset_id() -> int | None:
-    """
-    Return the configured SELF corpus dataset.
-
-    The research database should ideally contain exactly
-    one active SELF_CORPUS dataset.
-    """
-
-    with get_cursor() as cur:
-        cur.execute(
-            """
-            SELECT dataset_id
-            FROM datasets
-            WHERE research_role = 'SELF_CORPUS'
-            ORDER BY loaded_at DESC
-            LIMIT 1
-            """
-        )
-
-        row = cur.fetchone()
-
-    return int(row["dataset_id"]) if row else None
-
-
 # Experiment persistence
 
 
@@ -266,7 +247,7 @@ def create_experiment(
     *,
     user_id: int,
     dataset_id: int,
-    training_dataset_id: int | None,
+    training_dataset_id: int,
     experiment_name: str,
     experiment_description: str | None,
     nsa: NegativeSelectionAlgorithm,
@@ -592,34 +573,51 @@ def evaluate_results(
     EvaluationMetrics | None,
 ]:
     """
-    Calculate metrics only when labelled records exist.
+    Calculate metrics only for labelled, classifiable records.
 
-    Unlabelled ANALYSIS datasets intentionally return
-    no accuracy/precision/recall values.
+        - Ground truth must be SELF or NON_SELF.
+        - OOV predictions are excluded from TP/TN/FP/FN.
+        - OOV is reported separately by the experiment's oov_count.
+        - Unlabelled ANALYSIS datasets return no evaluation metrics.
     """
 
-    labelled_pairs = [
-        (
-            record["ground_truth_label"],
-            result.classification,
+    if len(dataset_records) != len(results):
+        raise ValueError(
+            "Dataset records and NSA results do not have matching lengths."
         )
-        for record, result in zip(
-            dataset_records,
-            results,
+
+    labelled_pairs: list[tuple[str, str]] = []
+
+    for record, result in zip(
+        dataset_records,
+        results,
+    ):
+        truth = record["ground_truth_label"]
+        prediction = result.classification
+
+        if truth not in {"SELF", "NON_SELF"}:
+            continue
+
+        # OOV has its own meaning and is not automatically an anomaly.
+        if prediction == "OOV":
+            continue
+
+        if prediction not in {"SELF", "NON_SELF"}:
+            continue
+
+        labelled_pairs.append(
+            (
+                truth,
+                prediction,
+            )
         )
-        if record["ground_truth_label"]
-        in {
-            "SELF",
-            "NON_SELF",
-        }
-    ]
 
     if not labelled_pairs:
         return None, None
 
-    ground_truth = [pair[0] for pair in labelled_pairs]
+    ground_truth = [truth for truth, _ in labelled_pairs]
 
-    predictions = [pair[1] for pair in labelled_pairs]
+    predictions = [prediction for _, prediction in labelled_pairs]
 
     matrix = calculate_confusion_matrix(
         ground_truth,
@@ -640,74 +638,103 @@ def run_experiment(
     dataset_id: int,
     experiment_name: str,
     experiment_description: str | None = None,
-    detector_count: int = 200,
-    detector_radius: float = 0.40,
-    self_match_threshold: float = 0.75,
-    max_attempts: int = 10_000,
-    random_seed: int = 42,
+    detector_count: int = NSA_DEFAULT_DETECTOR_COUNT,
+    detector_radius: float = NSA_DEFAULT_DETECTOR_RADIUS,
+    self_match_threshold: float = NSA_DEFAULT_SELF_MATCH_THRESHOLD,
+    max_attempts: int = NSA_DEFAULT_MAX_ATTEMPTS,
+    random_seed: int = NSA_DEFAULT_RANDOM_SEED,
     self_corpus_dataset_id: int | None = None,
 ) -> ExperimentSummary:
 
     experiment_started = time.perf_counter()
 
-    # Dataset
+    experiment_name = experiment_name.strip()
 
-    dataset = get_dataset_info(dataset_id)  # noqa: F841
+    if not experiment_name:
+        raise ValueError("experiment_name cannot be blank.")
+
+    # Evaluation / analysis dataset
+
+    dataset = get_dataset_info(dataset_id)
+
+    if dataset["research_role"] not in {
+        "EVALUATION",
+        "ANALYSIS",
+    }:
+        raise ValueError(
+            "The experiment dataset must have research role " "EVALUATION or ANALYSIS."
+        )
 
     records = load_dataset_records(dataset_id)
 
     if not records:
-        raise ValueError("The selected dataset contains " "no feedback records.")
+        raise ValueError("The selected dataset contains no feedback records.")
 
-    texts = [row["raw_text"] for row in records]
+    texts = [str(row["raw_text"]).strip() for row in records]
 
-    # Training dataset
+    # Explicit SELF training corpus
 
-    if self_corpus_dataset_id is not None:
-        # Use the caller-supplied self corpus dataset.
-        training_dataset_id = self_corpus_dataset_id
-        training_corpus = load_self_corpus_by_id(self_corpus_dataset_id)
-    else:
-        # Fall back to the most-recently-uploaded SELF_CORPUS dataset.
-        training_dataset_id = get_self_dataset_id()
+    if self_corpus_dataset_id is None:
+        raise ValueError("Select a SELF_CORPUS dataset before running the experiment.")
 
-        if training_dataset_id is None:
-            raise RuntimeError("No SELF_CORPUS dataset has " "been configured.")
+    if self_corpus_dataset_id == dataset_id:
+        raise ValueError(
+            "The SELF training corpus and experiment dataset must be "
+            "different datasets to avoid evaluation data leakage."
+        )
 
-        training_corpus = None  # get_nsa() will load it internally
+    training_dataset = get_dataset_info(self_corpus_dataset_id)
 
-    # NSA
+    if training_dataset["research_role"] != "SELF_CORPUS":
+        raise ValueError(f"Dataset {self_corpus_dataset_id} is not a SELF_CORPUS.")
+
+    training_dataset_id = self_corpus_dataset_id
+
+    # load_self_corpus_by_id() preserves the selected dataset but returns
+    # only SELF-labelled rows when the corpus contains ground-truth labels.
+    training_corpus = load_self_corpus_by_id(training_dataset_id)
+
+    if not training_corpus:
+        raise RuntimeError("The selected SELF corpus contains no usable SELF records.")
+
+    # NSA training / cache
 
     nsa = get_nsa(
         detector_count=detector_count,
         detector_radius=detector_radius,
-        self_match_threshold=(self_match_threshold),
+        self_match_threshold=self_match_threshold,
         max_attempts=max_attempts,
         random_seed=random_seed,
         corpus=training_corpus,
     )
 
-    # Experiment metadata
+    if nsa.training_statistics is None:
+        raise RuntimeError("NSA training statistics are unavailable.")
+
+    # Persist experiment metadata before detection
 
     experiment_id = create_experiment(
         user_id=user_id,
         dataset_id=dataset_id,
-        training_dataset_id=(training_dataset_id),
-        experiment_name=(experiment_name),
-        experiment_description=(experiment_description),
+        training_dataset_id=training_dataset_id,
+        experiment_name=experiment_name,
+        experiment_description=experiment_description,
         nsa=nsa,
     )
 
     try:
-
-        # Persist detector population
+        # -------------------------------------------------------------
+        # Persist detector population for this experiment
+        # -------------------------------------------------------------
 
         detector_map = save_detectors(
             experiment_id,
             nsa,
         )
 
+        # -------------------------------------------------------------
         # Detection
+        # -------------------------------------------------------------
 
         detection_started = time.perf_counter()
 
@@ -718,7 +745,6 @@ def run_experiment(
             texts,
             start=1,
         ):
-
             item_started = time.perf_counter()
 
             result = nsa.detect_one(
@@ -729,12 +755,13 @@ def run_experiment(
             item_time_ms = (time.perf_counter() - item_started) * 1000
 
             results.append(result)
-
             detection_times.append(item_time_ms)
 
         detection_time_ms = (time.perf_counter() - detection_started) * 1000
 
-        # Aggregate NSA response
+        # -------------------------------------------------------------
+        # Aggregate predictions
+        # -------------------------------------------------------------
 
         self_count = sum(result.classification == "SELF" for result in results)
 
@@ -742,46 +769,46 @@ def run_experiment(
 
         oov_count = sum(result.classification == "OOV" for result in results)
 
-        if nsa.training_statistics is None:
-            raise RuntimeError("Training statistics " "are unavailable.")
-
         response = NSAResponse(
             total_records=len(results),
             self_records=self_count,
-            non_self_records=(non_self_count),
+            non_self_records=non_self_count,
             oov_records=oov_count,
             results=results,
-            training_statistics=(nsa.training_statistics),
+            training_statistics=nsa.training_statistics,
         )
 
-        # Save record-level results
+        # -------------------------------------------------------------
+        # Record-level persistence
+        # -------------------------------------------------------------
 
         save_experiment_results(
-            experiment_id=(experiment_id),
+            experiment_id=experiment_id,
             dataset_records=records,
             results=results,
             detector_map=detector_map,
-            detection_times=(detection_times),
+            detection_times=detection_times,
         )
 
+        # -------------------------------------------------------------
         # Evaluation
+        # -------------------------------------------------------------
 
-        (
-            confusion_matrix,
-            metrics,
-        ) = evaluate_results(
+        confusion_matrix, metrics = evaluate_results(
             records,
             results,
         )
 
+        # -------------------------------------------------------------
         # Complete experiment
+        # -------------------------------------------------------------
 
         total_execution_time_ms = (time.perf_counter() - experiment_started) * 1000
 
         complete_experiment(
-            experiment_id=(experiment_id),
+            experiment_id=experiment_id,
             response=response,
-            confusion_matrix=(confusion_matrix),
+            confusion_matrix=confusion_matrix,
             metrics=metrics,
             detection_time_ms=round(
                 detection_time_ms,
@@ -793,20 +820,22 @@ def run_experiment(
             ),
         )
 
-        # Return research summary
+        # -------------------------------------------------------------
+        # API summary
+        # -------------------------------------------------------------
 
         return ExperimentSummary(
-            experiment_id=(experiment_id),
-            experiment_name=(experiment_name),
-            total_records=(response.total_records),
-            self_count=(response.self_records),
-            non_self_count=(response.non_self_records),
-            oov_count=(response.oov_records),
+            experiment_id=experiment_id,
+            experiment_name=experiment_name,
+            total_records=response.total_records,
+            self_count=response.self_records,
+            non_self_count=response.non_self_records,
+            oov_count=response.oov_records,
             requested_detector_count=(nsa.training_statistics.requested_detectors),
             generated_detector_count=(nsa.training_statistics.generated_detectors),
             detector_generation_attempts=(nsa.training_statistics.generation_attempts),
             detector_acceptance_rate=(nsa.training_statistics.detector_acceptance_rate),
-            confusion_matrix=(confusion_matrix),
+            confusion_matrix=confusion_matrix,
             metrics=metrics,
             training_time_ms=(nsa.training_statistics.training_time_ms),
             detection_time_ms=round(
@@ -820,14 +849,12 @@ def run_experiment(
         )
 
     except Exception:
-
         logger.exception(
             "NSA experiment %s failed.",
             experiment_id,
         )
 
         fail_experiment(experiment_id)
-
         raise
 
 
@@ -924,6 +951,10 @@ def list_experiments(
                 d.source_name
                     AS dataset_name,
 
+                e.training_dataset_id,
+                td.source_name
+                    AS training_dataset_name,
+
                 e.requested_detector_count,
                 e.generated_detector_count,
 
@@ -952,6 +983,10 @@ def list_experiments(
             LEFT JOIN datasets d
                 ON d.dataset_id
                 = e.dataset_id
+
+            LEFT JOIN datasets td
+                ON td.dataset_id
+                = e.training_dataset_id
 
             WHERE e.user_id = %s
 

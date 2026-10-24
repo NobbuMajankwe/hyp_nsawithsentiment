@@ -24,7 +24,9 @@ from dataset_handler import (
     parse_csv_file,
     parse_json_file,
     parse_labelled_csv_file,
+    parse_labelled_json_file,
     save_dataset_to_db,
+    save_labelled_dataset_to_db,
 )
 from experiment_service import (
     get_experiment,
@@ -442,6 +444,56 @@ def _save_nsa_config(
         )
 
 
+def _validate_nsa_parameters(
+    *,
+    detector_count: int,
+    detector_radius: float,
+    self_match_threshold: float,
+    max_attempts: int,
+) -> None:
+    """
+    Validate NSA parameters used by both configuration and experiment routes.
+
+    nsa.py uses cosine distance on non-negative L2-normalised vectors, so
+    detector radius and SELF-match threshold are constrained to (0, 1].
+    The SELF-match threshold must also be at least as large as the detector
+    radius so an accepted detector does not immediately overlap known SELF.
+    """
+
+    if not (1 <= detector_count <= 5000):
+        raise HTTPException(
+            status_code=422,
+            detail="detectorCount must be between 1 and 5000.",
+        )
+
+    if not (0.001 <= detector_radius <= 1.0):
+        raise HTTPException(
+            status_code=422,
+            detail="detectorRadius must be between 0.001 and 1.0.",
+        )
+
+    if not (0.001 <= self_match_threshold <= 1.0):
+        raise HTTPException(
+            status_code=422,
+            detail="selfMatchThreshold must be between 0.001 and 1.0.",
+        )
+
+    if self_match_threshold < detector_radius:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "selfMatchThreshold must be greater than or equal to "
+                "detectorRadius."
+            ),
+        )
+
+    if not (1 <= max_attempts <= 1_000_000):
+        raise HTTPException(
+            status_code=422,
+            detail="maxAttempts must be between 1 and 1,000,000.",
+        )
+
+
 @nsa_router.get(
     "/config",
     response_model=NsaConfigResponse,
@@ -490,35 +542,12 @@ def update_nsa_config(
         ),
     }
 
-    # Validation
-
-    if not (1 <= config["detectorCount"] <= 5000):
-
-        raise HTTPException(
-            status_code=422,
-            detail=("detectorCount must be " "between 1 and 5000."),
-        )
-
-    if not (0.001 <= config["detectorRadius"] <= 2.0):
-
-        raise HTTPException(
-            status_code=422,
-            detail=("detectorRadius must be " "between 0.001 and 2.0."),
-        )
-
-    if not (0.001 <= config["selfMatchThreshold"] <= 2.0):
-
-        raise HTTPException(
-            status_code=422,
-            detail=("selfMatchThreshold must " "be between 0.001 and 2.0."),
-        )
-
-    if not (1 <= config["maxAttempts"] <= 1_000_000):
-
-        raise HTTPException(
-            status_code=422,
-            detail=("maxAttempts must be " "between 1 and 1,000,000."),
-        )
+    _validate_nsa_parameters(
+        detector_count=config["detectorCount"],
+        detector_radius=config["detectorRadius"],
+        self_match_threshold=config["selfMatchThreshold"],
+        max_attempts=config["maxAttempts"],
+    )
 
     _save_nsa_config(
         user_id,
@@ -549,7 +578,6 @@ async def upload_dataset(
     user_id = int(current_user["sub"])
 
     if not file.filename:
-
         raise HTTPException(
             status_code=400,
             detail="No file provided.",
@@ -558,260 +586,160 @@ async def upload_dataset(
     filename = file.filename.lower()
 
     if filename.endswith(".csv"):
-
-        source_type = "CSV"
-
-    elif filename.endswith(".json"):
-
-        source_type = "JSON"
-
-    else:
-
-        raise HTTPException(
-            status_code=400,
-            detail=("Only CSV and JSON " "files are supported."),
-        )
-
-    content = await file.read()
-
-    if len(content) > (100 * 1024 * 1024):
-
-        raise HTTPException(
-            status_code=413,
-            detail=("File too large. " "Maximum size is 100MB."),
-        )
-
-    try:
-
-        if source_type == "CSV":
-
-            feedback_texts = parse_csv_file(content)
-
-        else:
-
-            feedback_texts = parse_json_file(content)
-
-    except DatasetParseError as exc:
-
-        raise HTTPException(
-            status_code=422,
-            detail=str(exc),
-        ) from exc
-
-    dataset_name = name.strip() if name else file.filename
-
-    try:
-
-        dataset_id = save_dataset_to_db(
-            user_id=user_id,
-            source_name=dataset_name,
-            source_type=source_type,
-            feedback_texts=feedback_texts,
-            file_path=file.filename,
-            description=description,
-        )
-
-        # Research role is metadata,
-        # not file format information.
-
-        with get_cursor(commit=True) as cur:
-
-            cur.execute(
-                """
-                UPDATE datasets
-                SET research_role = %s
-                WHERE dataset_id = %s
-                """,
-                (
-                    researchRole,
-                    dataset_id,
-                ),
-            )
-
-    except Exception as exc:
-
-        logger.exception("Dataset upload failed.")
-
-        raise HTTPException(
-            status_code=500,
-            detail=str(exc),
-        ) from exc
-
-    return {
-        "message": "Dataset uploaded successfully.",
-        "datasetId": dataset_id,
-        "name": dataset_name,
-        "type": source_type,
-        "researchRole": researchRole,
-        "totalRecords": len(feedback_texts),
-    }
-
-    user_id = int(current_user["sub"])
-
-    if not file.filename:
-
-        raise HTTPException(
-            status_code=400,
-            detail="No file provided.",
-        )
-
-    filename = file.filename.lower()
-
-    if filename.endswith(".csv"):
-
-        source_type = "CSV"
-
-    elif filename.endswith(".json"):
-
-        source_type = "JSON"
-
-    else:
-
-        raise HTTPException(
-            status_code=400,
-            detail=("Only CSV and JSON " "files are supported."),
-        )
-
-    content = await file.read()
-
-    if len(content) > (100 * 1024 * 1024):
-
-        raise HTTPException(
-            status_code=413,
-            detail=("File too large. " "Maximum size is 100MB."),
-        )
-
-    try:
-
-        if source_type == "CSV":
-
-            feedback_texts = parse_csv_file(content)
-
-        else:
-
-            feedback_texts = parse_json_file(content)
-
-    except DatasetParseError as exc:
-
-        raise HTTPException(
-            status_code=422,
-            detail=str(exc),
-        ) from exc
-
-    dataset_name = name.strip() if name else file.filename
-
-    try:
-
-        dataset_id = save_dataset_to_db(
-            user_id=user_id,
-            source_name=dataset_name,
-            source_type=source_type,
-            feedback_texts=feedback_texts,
-            file_path=file.filename,
-            description=description,
-        )
-
-        # Research role is metadata,
-        # not file format information.
-
-        with get_cursor(commit=True) as cur:
-
-            cur.execute(
-                """
-                UPDATE datasets
-                SET research_role = %s
-                WHERE dataset_id = %s
-                """,
-                (
-                    researchRole,
-                    dataset_id,
-                ),
-            )
-
-    except Exception as exc:
-
-        logger.exception("Dataset upload failed.")
-
-        raise HTTPException(
-            status_code=500,
-            detail=str(exc),
-        ) from exc
-
-    return {
-        "message": "Dataset uploaded successfully.",
-        "datasetId": dataset_id,
-        "name": dataset_name,
-        "type": source_type,
-        "researchRole": researchRole,
-        "totalRecords": len(feedback_texts),
-    }
-
-    user_id = current_user["sub"]
-
-    if not file.filename:
-        raise HTTPException(status_code=400, detail="No file provided")
-
-    filename = file.filename.lower()
-
-    if filename.endswith(".csv"):
         source_type = "CSV"
     elif filename.endswith(".json"):
         source_type = "JSON"
     else:
         raise HTTPException(
             status_code=400,
-            detail="Unsupported file type. Please upload a CSV or JSON file.",
+            detail="Only CSV and JSON files are supported.",
         )
 
     try:
         content = await file.read()
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise HTTPException(
-            status_code=400, detail=f"Failed to read file: {str(exc)}"
-        )  # noqa: RUF010
+            status_code=400,
+            detail=f"Failed to read file: {exc}",
+        ) from exc
 
     if len(content) > 100 * 1024 * 1024:
         raise HTTPException(
-            status_code=413, detail="File too large. Maximum size is 100MB."
+            status_code=413,
+            detail="File too large. Maximum size is 100MB.",
         )
 
+    dataset_name = (
+        name.strip()
+        if name and name.strip()
+        else file.filename
+    )
+
+    labelled_records: list[dict[str, str]] | None = None
+    feedback_texts: list[str] | None = None
+
     try:
-        if source_type == "CSV":
-            feedback_texts = parse_csv_file(content)
+        if researchRole == "EVALUATION":
+            # Evaluation must always have ground-truth labels.
+            if source_type == "CSV":
+                labelled_records = parse_labelled_csv_file(content)
+            else:
+                labelled_records = parse_labelled_json_file(content)
+
+        elif researchRole == "SELF_CORPUS":
+            # A SELF corpus may be labelled or completely unlabelled.
+            #
+            # First try to preserve labels. Only fall back to the unlabelled
+            # parser when the file genuinely has no label field.
+            try:
+                if source_type == "CSV":
+                    labelled_records = parse_labelled_csv_file(content)
+                else:
+                    labelled_records = parse_labelled_json_file(content)
+
+            except DatasetParseError as exc:
+                message = str(exc).lower()
+
+                missing_label = (
+                    "label column" in message
+                    or "no ground-truth label" in message
+                    or "no ground truth label" in message
+                )
+
+                if not missing_label:
+                    # A label exists but is invalid/corrupt. Do not silently
+                    # throw it away and turn the whole file into SELF.
+                    raise
+
+                if source_type == "CSV":
+                    feedback_texts = parse_csv_file(content)
+                else:
+                    feedback_texts = parse_json_file(content)
+
         else:
-            feedback_texts = parse_json_file(content)
-    except DatasetParseError as e:  # noqa: F841
-        raise HTTPException(status_code=422, detail=str(exc))  # noqa: F821
+            # ANALYSIS and SUPPORT are intentionally unlabelled.
+            if source_type == "CSV":
+                feedback_texts = parse_csv_file(content)
+            else:
+                feedback_texts = parse_json_file(content)
 
-    if not feedback_texts:
+    except DatasetParseError as exc:
         raise HTTPException(
-            status_code=422, detail="No valid feedback records found in file"
-        )
-
-    dataset_name = name or file.filename
+            status_code=422,
+            detail=str(exc),
+        ) from exc
 
     try:
-        dataset_id = save_dataset_to_db(
-            user_id=user_id,
-            source_name=dataset_name,
-            source_type=source_type,
-            feedback_texts=feedback_texts,
-            file_path=file.filename,
-            description=description,
-        )
-    except Exception as exc:  # noqa: BLE001
+        if labelled_records is not None:
+            dataset_id = save_labelled_dataset_to_db(
+                user_id=user_id,
+                source_name=dataset_name,
+                source_type=source_type,
+                records=labelled_records,
+                file_path=file.filename,
+                description=description,
+                research_role=researchRole,
+            )
+
+            self_count = sum(
+                record["label"] == "SELF"
+                for record in labelled_records
+            )
+            non_self_count = sum(
+                record["label"] == "NON_SELF"
+                for record in labelled_records
+            )
+            total_records = len(labelled_records)
+
+        else:
+            if feedback_texts is None:
+                raise RuntimeError(
+                    "Dataset parsing produced no records."
+                )
+
+            dataset_id = save_dataset_to_db(
+                user_id=user_id,
+                source_name=dataset_name,
+                source_type=source_type,
+                feedback_texts=feedback_texts,
+                file_path=file.filename,
+                description=description,
+                research_role=researchRole,
+            )
+
+            self_count = None
+            non_self_count = None
+            total_records = len(feedback_texts)
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=str(exc),
+        ) from exc
+
+    except Exception as exc:
+        logger.exception("Dataset upload failed.")
+
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to save dataset: {str(exc)}",  # noqa: RUF010
-        )
+            detail=f"Failed to save dataset: {exc}",
+        ) from exc
 
-    return {
-        "message": "Dataset uploaded successfully",
+    response = {
+        "message": "Dataset uploaded successfully.",
         "datasetId": dataset_id,
         "name": dataset_name,
         "type": source_type,
-        "totalRecords": len(feedback_texts),
+        "researchRole": researchRole,
+        "totalRecords": total_records,
+        "labelled": labelled_records is not None,
     }
+
+    if labelled_records is not None:
+        response["selfRecords"] = self_count
+        response["nonSelfRecords"] = non_self_count
+
+    return response
 
 
 @datasets_router.post(
@@ -825,194 +753,98 @@ async def upload_labelled_dataset(
     current_user: dict = Depends(get_current_user),  # noqa: B008
 ):
     """
-    Upload a labelled evaluation CSV.
-
-    Supported examples:
-
-        text,label
-        "registration was smooth",SELF
-        "claim free bitcoin",NON_SELF
-
-    Also supports datasets such as:
-
-        v1,v2
-        ham,"Hey, are you coming?"
-        spam,"Congratulations! You won..."
+    Backward-compatible labelled EVALUATION upload endpoint.
     """
 
     user_id = int(current_user["sub"])
 
-    # --------
-    # Validate file
-    # --------
-
-    if not file.filename or not file.filename.lower().endswith(".csv"):
+    if not file.filename:
         raise HTTPException(
             status_code=400,
-            detail=("A labelled experiment " "dataset must be CSV."),
+            detail="No file provided.",
         )
 
-    # --------
-    # Read file
-    # --------
+    filename = file.filename.lower()
+
+    if filename.endswith(".csv"):
+        source_type = "CSV"
+    elif filename.endswith(".json"):
+        source_type = "JSON"
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "A labelled evaluation dataset must be CSV or JSON."
+            ),
+        )
 
     try:
         content = await file.read()
-
     except Exception as exc:
         raise HTTPException(
             status_code=400,
             detail=f"Failed to read file: {exc}",
         ) from exc
 
-    # --------
-    # File size
-    # --------
-
     if len(content) > 100 * 1024 * 1024:
         raise HTTPException(
             status_code=413,
-            detail=("File too large. " "Maximum size is 100MB."),
+            detail="File too large. Maximum size is 100MB.",
         )
 
-    # --------
-    # Parse labelled CSV
-    # --------
-
     try:
-        parsed_records = parse_labelled_csv_file(content)
-
+        if source_type == "CSV":
+            records = parse_labelled_csv_file(content)
+        else:
+            records = parse_labelled_json_file(content)
     except DatasetParseError as exc:
         raise HTTPException(
             status_code=422,
             detail=str(exc),
         ) from exc
 
-    if not parsed_records:
-        raise HTTPException(
-            status_code=422,
-            detail=("No valid labelled " "records found."),
-        )
-
-    # --------
-    # Convert to tuple format used below
-    # --------
-
-    records = [
-        (
-            record["text"],
-            record["label"],
-        )
-        for record in parsed_records
-    ]
-
-    # --------
-    # Dataset name
-    # --------
-
-    dataset_name = name.strip() if name and name.strip() else file.filename
-
-    # --------
-    # Save dataset
-    # --------
+    dataset_name = (
+        name.strip()
+        if name and name.strip()
+        else file.filename
+    )
 
     try:
-        with get_cursor(commit=True) as cur:
-
-            cur.execute(
-                """
-                INSERT INTO datasets
-                (
-                    source_name,
-                    source_type,
-                    dataset_description,
-                    file_path,
-                    total_records,
-                    research_role,
-                    loaded_by
-                )
-
-                VALUES
-                (
-                    %s,
-                    %s,
-                    %s,
-                    %s,
-                    %s,
-                    'EVALUATION',
-                    %s
-                )
-
-                RETURNING dataset_id
-                """,
-                (
-                    dataset_name,
-                    "CSV",
-                    description,
-                    file.filename,
-                    len(records),
-                    user_id,
-                ),
-            )
-
-            dataset_id = int(cur.fetchone()["dataset_id"])
-
-            #
-            # Save labelled records
-            #
-
-            for text, label in records:
-
-                cur.execute(
-                    """
-                    INSERT INTO feedback_records
-                    (
-                        dataset_id,
-                        raw_text,
-                        ground_truth_label,
-                        preprocessing_complete
-                    )
-
-                    VALUES
-                    (
-                        %s,
-                        %s,
-                        %s,
-                        FALSE
-                    )
-                    """,
-                    (
-                        dataset_id,
-                        text,
-                        label,
-                    ),
-                )
-
+        dataset_id = save_labelled_dataset_to_db(
+            user_id=user_id,
+            source_name=dataset_name,
+            source_type=source_type,
+            records=records,
+            file_path=file.filename,
+            description=description,
+            research_role="EVALUATION",
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=str(exc),
+        ) from exc
     except Exception as exc:
-
         logger.exception("Labelled dataset upload failed.")
-
         raise HTTPException(
             status_code=500,
-            detail=(f"Failed to save labelled " f"dataset: {exc}"),
+            detail=f"Failed to save labelled dataset: {exc}",
         ) from exc
 
-    # --------
-    # Counts
-    # --------
-
-    self_count = sum(1 for _, label in records if label == "SELF")
-
-    non_self_count = sum(1 for _, label in records if label == "NON_SELF")
-
-    # --------
-    # Response
-    # --------
+    self_count = sum(
+        record["label"] == "SELF"
+        for record in records
+    )
+    non_self_count = sum(
+        record["label"] == "NON_SELF"
+        for record in records
+    )
 
     return {
-        "message": ("Labelled evaluation dataset " "uploaded successfully."),
+        "message": "Labelled evaluation dataset uploaded successfully.",
         "datasetId": dataset_id,
         "name": dataset_name,
+        "type": source_type,
         "researchRole": "EVALUATION",
         "totalRecords": len(records),
         "selfRecords": self_count,
@@ -1139,35 +971,12 @@ def start_experiment(
 
     user_id = int(current_user["sub"])
 
-    # Research parameter validation
-
-    if not (1 <= body.detectorCount <= 5000):
-
-        raise HTTPException(
-            status_code=422,
-            detail=("detectorCount must be " "between 1 and 5000."),
-        )
-
-    if not (0.001 <= body.detectorRadius <= 2.0):
-
-        raise HTTPException(
-            status_code=422,
-            detail=("detectorRadius must be " "between 0.001 and 2.0."),
-        )
-
-    if not (0.001 <= body.selfMatchThreshold <= 2.0):
-
-        raise HTTPException(
-            status_code=422,
-            detail=("selfMatchThreshold must " "be between 0.001 and 2.0."),
-        )
-
-    if not (1 <= body.maxAttempts <= 1_000_000):
-
-        raise HTTPException(
-            status_code=422,
-            detail=("maxAttempts must be " "between 1 and 1,000,000."),
-        )
+    _validate_nsa_parameters(
+        detector_count=body.detectorCount,
+        detector_radius=body.detectorRadius,
+        self_match_threshold=body.selfMatchThreshold,
+        max_attempts=body.maxAttempts,
+    )
 
     try:
 

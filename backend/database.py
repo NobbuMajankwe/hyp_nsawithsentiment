@@ -672,16 +672,23 @@ CREATE TABLE IF NOT EXISTS integration_settings (
 
     /*
         NSA research configuration.
+
+        Defaults:
+            detector_count       = 200
+            detector_radius      = 0.20
+            self_match_threshold = 0.30
+            max_attempts         = 10000
+            random_seed          = 42
     */
 
     nsa_detector_count INTEGER
         DEFAULT 200,
 
     nsa_detector_radius NUMERIC(12,8)
-        DEFAULT 0.40,
+        DEFAULT 0.20,
 
     nsa_self_match_threshold NUMERIC(12,8)
-        DEFAULT 0.75,
+        DEFAULT 0.30,
 
     nsa_max_attempts INTEGER
         DEFAULT 10000,
@@ -753,6 +760,10 @@ ON feedback_records(dataset_id);
 
 CREATE INDEX IF NOT EXISTS idx_feedback_ground_truth
 ON feedback_records(ground_truth_label);
+
+
+CREATE INDEX IF NOT EXISTS idx_feedback_dataset_ground_truth
+ON feedback_records(dataset_id, ground_truth_label);
 
 
 CREATE INDEX IF NOT EXISTS idx_dataset_research_role
@@ -835,11 +846,11 @@ ADD COLUMN IF NOT EXISTS ground_truth_label VARCHAR(20);
 MIGRATE_INTEGRATION_SETTINGS = """
 ALTER TABLE integration_settings
 ADD COLUMN IF NOT EXISTS nsa_detector_radius NUMERIC(12,8)
-DEFAULT 0.40;
+DEFAULT 0.20;
 
 ALTER TABLE integration_settings
 ADD COLUMN IF NOT EXISTS nsa_self_match_threshold NUMERIC(12,8)
-DEFAULT 0.75;
+DEFAULT 0.30;
 
 ALTER TABLE integration_settings
 ADD COLUMN IF NOT EXISTS nsa_max_attempts INTEGER
@@ -856,8 +867,36 @@ ADD COLUMN IF NOT EXISTS nsa_api_url TEXT;
 
 # CREATE TABLE IF NOT EXISTS does not update tables created by earlier versions.
 # Keep these changes before CREATE_INDEXES, which references the new columns.
-# Columns added to tables with existing rows remain nullable; new application
-# writes populate them. Do not infer a training dataset from legacy dataset_id.
+#
+# training_dataset_id remains nullable at database level for legacy experiment
+# rows. New experiments require an explicitly selected SELF_CORPUS in the
+# application layer. Do not infer a training dataset from legacy dataset_id.
+MIGRATE_NSA_COSINE_DEFAULTS = """
+-- Align stored user configuration with the cosine-distance NSA defaults.
+--
+-- IMPORTANT:
+-- Historical experiment_runs are not changed. Their stored parameters are
+-- part of the research record and must remain reproducible.
+
+ALTER TABLE integration_settings
+    ALTER COLUMN nsa_detector_count SET DEFAULT 200,
+    ALTER COLUMN nsa_detector_radius SET DEFAULT 0.20,
+    ALTER COLUMN nsa_self_match_threshold SET DEFAULT 0.30,
+    ALTER COLUMN nsa_max_attempts SET DEFAULT 10000,
+    ALTER COLUMN nsa_random_seed SET DEFAULT 42;
+
+-- Earlier versions created new user settings with exactly 0.40 / 0.75.
+-- Update only that legacy default pair. Other custom values are preserved.
+UPDATE integration_settings
+SET
+    nsa_detector_radius = 0.20,
+    nsa_self_match_threshold = 0.30,
+    updated_at = CURRENT_TIMESTAMP
+WHERE nsa_detector_radius = 0.40
+  AND nsa_self_match_threshold = 0.75;
+"""
+
+
 MIGRATE_EXISTING_RESEARCH_TABLES = """
 ALTER TABLE experiment_runs
     ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(user_id),
@@ -975,6 +1014,8 @@ SCHEMA_STATEMENTS = (
     MIGRATE_FEEDBACK_GROUND_TRUTH,
 
     MIGRATE_INTEGRATION_SETTINGS,
+
+    MIGRATE_NSA_COSINE_DEFAULTS,
 
     MIGRATE_EXISTING_RESEARCH_TABLES,
 
