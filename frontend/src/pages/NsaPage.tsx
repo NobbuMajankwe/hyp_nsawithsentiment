@@ -27,14 +27,16 @@ import {
 } from "../services/api";
 
 // ─── tokens ──────────────────────────────────────────────────────────────────
-const BG    = "#050816";
-const BG2   = "#020617";
+const BG = "#050816";
+const BG2 = "#020617";
 const BORDER = "1px solid rgba(34,211,238,0.2)";
-const MONO  = "monospace";
+const MONO = "monospace";
 const FIELD_SX = {
   "& .MuiOutlinedInput-root": { color: "#e2e8f0" },
   "& .MuiInputLabel-root": { color: "#94a3b8" },
-  "& .MuiOutlinedInput-notchedOutline": { borderColor: "rgba(34,211,238,0.25)" },
+  "& .MuiOutlinedInput-notchedOutline": {
+    borderColor: "rgba(34,211,238,0.25)",
+  },
   "& .MuiSvgIcon-root": { color: "#22d3ee" },
   "& .MuiFormHelperText-root": { color: "#64748b" },
 };
@@ -46,31 +48,113 @@ const defaults: RunRequest = {
   experimentDescription: "",
   detectorCount: 200,
   detectorRadius: 0.2,
-  selfMatchThreshold: 0.30,
+  selfMatchThreshold: 0.3,
   maxAttempts: 10000,
   randomSeed: 42,
   selfCorpusDatasetId: null,
+  word2vecVectorSize: 100,
+  word2vecWindow: 5,
+  word2vecMinCount: 1,
+  word2vecEpochs: 50,
 };
 const parameters = [
-  { key: "detectorCount",      label: "Detector count",       min: 1,     max: 5000,    step: 1     },
-  { key: "detectorRadius",     label: "Detector radius",      min: 0.001, max: 2,       step: 0.001 },
-  { key: "selfMatchThreshold", label: "Self match threshold", min: 0.001, max: 2,       step: 0.001 },
-  { key: "maxAttempts",        label: "Maximum attempts",     min: 1,     max: 1000000, step: 1     },
+  { key: "detectorCount", label: "Detector count", min: 1, max: 5000, step: 1 },
+  {
+    key: "detectorRadius",
+    label: "Detector radius",
+    min: 0.001,
+    max: 1,
+    step: 0.001,
+  },
+  {
+    key: "selfMatchThreshold",
+    label: "Self match threshold",
+    min: 0.001,
+    max: 1,
+    step: 0.001,
+  },
+  {
+    key: "maxAttempts",
+    label: "Maximum attempts",
+    min: 1,
+    max: 1000000,
+    step: 1,
+  },
 ] as const;
-type NumericField = (typeof parameters)[number]["key"] | "datasetId" | "randomSeed";
 
-function validate(form: RunRequest, candidates: Dataset[], selfCorpusDatasets: Dataset[]): string | null {
-  if (selfCorpusDatasets.length === 0) return "Upload a SELF_CORPUS dataset before running an experiment.";
+const word2vecParameters = [
+  {
+    key: "word2vecVectorSize",
+    label: "Vector size",
+    min: 10,
+    max: 1000,
+    step: 1,
+    helper: "Number of dimensions in each Word2Vec embedding.",
+  },
+  {
+    key: "word2vecWindow",
+    label: "Window size",
+    min: 1,
+    max: 50,
+    step: 1,
+    helper: "Maximum context distance used while training Word2Vec.",
+  },
+  {
+    key: "word2vecMinCount",
+    label: "Minimum word count",
+    min: 1,
+    max: 100,
+    step: 1,
+    helper:
+      "Words occurring fewer times are excluded from the Word2Vec vocabulary.",
+  },
+  {
+    key: "word2vecEpochs",
+    label: "Training epochs",
+    min: 1,
+    max: 1000,
+    step: 1,
+    helper: "Number of passes over the selected SELF corpus.",
+  },
+] as const;
+
+type NumericField =
+  | (typeof parameters)[number]["key"]
+  | (typeof word2vecParameters)[number]["key"]
+  | "datasetId"
+  | "randomSeed";
+
+function validate(
+  form: RunRequest,
+  candidates: Dataset[],
+  selfCorpusDatasets: Dataset[],
+): string | null {
+  if (selfCorpusDatasets.length === 0)
+    return "Upload a SELF_CORPUS dataset before running an experiment.";
   if (selfCorpusDatasets.length > 1 && !form.selfCorpusDatasetId)
     return "Choose which SELF corpus to train with.";
-  if (!candidates.some((d) => d.id === form.datasetId)) return "Choose an evaluation or analysis dataset.";
+  if (!candidates.some((d) => d.id === form.datasetId))
+    return "Choose an evaluation or analysis dataset.";
   if (!form.experimentName.trim()) return "Enter an experiment name.";
-  for (const { key, label, min, max, step } of parameters) {
-    const v = form[key];
-    if (!Number.isFinite(v) || v < min || v > max || (step === 1 && !Number.isInteger(v)))
-      return `${label} must be ${step === 1 ? "a whole number " : ""}between ${min} and ${max}.`;
+  for (const { key, label, min, max, step } of [
+    ...parameters,
+    ...word2vecParameters,
+  ]) {
+    const v = Number(form[key]);
+    if (
+      !Number.isFinite(v) ||
+      v < min ||
+      v > max ||
+      (step === 1 && !Number.isInteger(v))
+    )
+      return `${label} must be ${
+        step === 1 ? "a whole number " : ""
+      }between ${min} and ${max}.`;
   }
-  if (!Number.isSafeInteger(form.randomSeed)) return "Random seed must be a whole number.";
+  if (form.selfMatchThreshold < form.detectorRadius)
+    return "Self match threshold must be greater than or equal to detector radius.";
+  if (!Number.isSafeInteger(form.randomSeed))
+    return "Random seed must be a whole number.";
   return null;
 }
 
@@ -88,14 +172,26 @@ export function NsaPage() {
     let active = true;
     setLoading(true);
     listDatasets(token)
-      .then((r: any) => { if (active) setDatasets(r.datasets); })
-      .catch((e: unknown) => { if (active) setError(e instanceof Error ? e.message : "Could not load datasets."); })
-      .finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
+      .then((r: any) => {
+        if (active) setDatasets(r.datasets);
+      })
+      .catch((e: unknown) => {
+        if (active)
+          setError(e instanceof Error ? e.message : "Could not load datasets.");
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
   }, [token]);
 
   const candidates = useMemo(
-    () => datasets.filter((d) => d.researchRole === "EVALUATION" || d.researchRole === "ANALYSIS"),
+    () =>
+      datasets.filter(
+        (d) => d.researchRole === "EVALUATION" || d.researchRole === "ANALYSIS",
+      ),
     [datasets],
   );
   const selfCorpusDatasets = useMemo(
@@ -109,7 +205,10 @@ export function NsaPage() {
   // Auto-select the only self corpus so the user doesn't have to pick
   useEffect(() => {
     if (selfCorpusDatasets.length === 1 && !form.selfCorpusDatasetId) {
-      setForm((p: any) => ({ ...p, selfCorpusDatasetId: selfCorpusDatasets[0].id }));
+      setForm((p: any) => ({
+        ...p,
+        selfCorpusDatasetId: selfCorpusDatasets[0].id,
+      }));
     }
   }, [selfCorpusDatasets]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -121,19 +220,26 @@ export function NsaPage() {
     e.preventDefault();
     if (!token || running) return;
     const problem = validate(form, candidates, selfCorpusDatasets);
-    if (problem) { setError(problem); return; }
-    setRunning(true); setError("");
+    if (problem) {
+      setError(problem);
+      return;
+    }
+    setRunning(true);
+    setError("");
     try {
       const result = await runExperiment(token, {
         ...form,
         experimentName: form.experimentName.trim(),
         experimentDescription: form.experimentDescription?.trim(),
         // Resolve: if only one corpus exists and none is explicitly chosen, use it
-        selfCorpusDatasetId: form.selfCorpusDatasetId ?? selfCorpusDatasets[0]?.id ?? null,
+        selfCorpusDatasetId:
+          form.selfCorpusDatasetId ?? selfCorpusDatasets[0]?.id ?? null,
       });
       navigate(`/experiments/${result.experimentId}`);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Experiment could not run.");
+      setError(
+        cause instanceof Error ? cause.message : "Experiment could not run.",
+      );
     } finally {
       setRunning(false);
     }
@@ -146,9 +252,13 @@ export function NsaPage() {
         iconColor="#22d3ee"
         badge="$ nsa_engine --configure"
         badgeIcon={<Settings2 size={11} />}
-        title={<>&gt; Run_NSA_Experiment<span style={{ color: "#22d3ee" }}>.</span></>}
-        description="Choose feedback, configure detector parameters, and save a reproducible NSA experiment run."
-        chips={["select_dataset()", "configure_detectors()", "run_experiment()"]}
+        title={
+          <>
+            &gt; Run_NSA_Experiment<span style={{ color: "#22d3ee" }}>.</span>
+          </>
+        }
+        description="Choose labelled text, train Word2Vec on the selected SELF corpus, configure NSA parameters, and save a reproducible experiment run."
+        chips={["select_dataset()", "train_word2vec()", "run_nsa()"]}
         statusLine={
           running
             ? "STATUS -> experiment running..."
@@ -166,17 +276,29 @@ export function NsaPage() {
         activeColor="#22d3ee"
       />
 
-      {error && <Alert severity="error" onClose={() => setError("")}>{error}</Alert>}
+      {error && (
+        <Alert severity="error" onClose={() => setError("")}>
+          {error}
+        </Alert>
+      )}
 
       {loading ? (
-        <CircularProgress aria-label="Loading datasets" sx={{ color: "#22d3ee" }} />
+        <CircularProgress
+          aria-label="Loading datasets"
+          sx={{ color: "#22d3ee" }}
+        />
       ) : (
         <>
           {!hasSelf && (
             <Alert
               severity="warning"
               action={
-                <Button component={Link} to="/datasets" color="inherit" sx={{ fontFamily: MONO }}>
+                <Button
+                  component={Link}
+                  to="/datasets"
+                  color="inherit"
+                  sx={{ fontFamily: MONO }}
+                >
                   Upload
                 </Button>
               }
@@ -188,29 +310,54 @@ export function NsaPage() {
             <Alert
               severity="info"
               action={
-                <Button component={Link} to="/datasets" color="inherit" sx={{ fontFamily: MONO }}>
+                <Button
+                  component={Link}
+                  to="/datasets"
+                  color="inherit"
+                  sx={{ fontFamily: MONO }}
+                >
                   Upload
                 </Button>
               }
             >
-              Upload a labelled EVALUATION dataset or an unlabelled ANALYSIS dataset.
+              Upload a labelled EVALUATION dataset or an unlabelled ANALYSIS
+              dataset.
             </Alert>
           )}
 
-          <Card component="form" onSubmit={handleRun} sx={{ bgcolor: BG, border: BORDER }}>
+          <Card
+            component="form"
+            onSubmit={handleRun}
+            sx={{ bgcolor: BG, border: BORDER }}
+          >
             <CardContent>
               <Stack spacing={2.5}>
-                <Stack direction="row" spacing={1} sx={{ alignItems: "center", mb: 0.5 }}>
+                <Stack
+                  direction="row"
+                  spacing={1}
+                  sx={{ alignItems: "center", mb: 0.5 }}
+                >
                   <Terminal size={16} color="#22d3ee" />
-                  <Typography variant="h6" sx={{ fontWeight: 700, color: "#f8fafc" }}>
+                  <Typography
+                    variant="h6"
+                    sx={{ fontWeight: 700, color: "#f8fafc" }}
+                  >
                     Experiment configuration
                   </Typography>
                 </Stack>
 
                 <TextField
-                  select required fullWidth label="Self corpus for training"
+                  select
+                  required
+                  fullWidth
+                  label="Self corpus for training"
                   value={form.selfCorpusDatasetId ?? ""}
-                  onChange={(e) => setForm((p: any) => ({ ...p, selfCorpusDatasetId: Number(e.target.value) || null }))}
+                  onChange={(e) =>
+                    setForm((p: any) => ({
+                      ...p,
+                      selfCorpusDatasetId: Number(e.target.value) || null,
+                    }))
+                  }
                   helperText={
                     selfCorpusDatasets.length === 0
                       ? "No SELF_CORPUS datasets available — upload one first."
@@ -228,7 +375,10 @@ export function NsaPage() {
                 </TextField>
 
                 <TextField
-                  select required fullWidth label="Dataset to classify"
+                  select
+                  required
+                  fullWidth
+                  label="Dataset to classify"
                   value={form.datasetId || ""}
                   onChange={(e) => setNumber("datasetId", e.target.value)}
                   sx={FIELD_SX}
@@ -242,19 +392,34 @@ export function NsaPage() {
 
                 {selected?.researchRole === "ANALYSIS" && (
                   <Alert severity="info">
-                    This dataset has no ground-truth labels. Precision, recall, and F1 will be unavailable.
+                    This dataset has no ground-truth labels. Precision, recall,
+                    and F1 will be unavailable.
                   </Alert>
                 )}
 
                 <TextField
-                  required label="Experiment name" value={form.experimentName}
-                  onChange={(e) => setForm((p: any) => ({ ...p, experimentName: e.target.value }))}
+                  required
+                  label="Experiment name"
+                  value={form.experimentName}
+                  onChange={(e) =>
+                    setForm((p: any) => ({
+                      ...p,
+                      experimentName: e.target.value,
+                    }))
+                  }
                   sx={FIELD_SX}
                 />
                 <TextField
-                  label="Description (optional)" multiline minRows={2}
+                  label="Description (optional)"
+                  multiline
+                  minRows={2}
                   value={form.experimentDescription || ""}
-                  onChange={(e) => setForm((p: any) => ({ ...p, experimentDescription: e.target.value }))}
+                  onChange={(e) =>
+                    setForm((p: any) => ({
+                      ...p,
+                      experimentDescription: e.target.value,
+                    }))
+                  }
                   sx={FIELD_SX}
                 />
 
@@ -267,19 +432,28 @@ export function NsaPage() {
                     $ detector_parameters
                   </Typography>
                   <Box
-                    sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" }, gap: 2 }}
+                    sx={{
+                      display: "grid",
+                      gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" },
+                      gap: 2,
+                    }}
                   >
                     {parameters.map(({ key, label, min, max, step }) => (
                       <TextField
-                        key={key} label={label} type="number"
+                        key={key}
+                        label={label}
+                        type="number"
                         value={Number.isNaN(form[key]) ? "" : form[key]}
                         sx={{ ...FIELD_SX, input: { min, max, step } }}
                         onChange={(e) => setNumber(key, e.target.value)}
                       />
                     ))}
                     <TextField
-                      label="Random seed" type="number"
-                      value={Number.isNaN(form.randomSeed) ? "" : form.randomSeed}
+                      label="Random seed"
+                      type="number"
+                      value={
+                        Number.isNaN(form.randomSeed) ? "" : form.randomSeed
+                      }
                       sx={FIELD_SX}
                       onChange={(e) => setNumber("randomSeed", e.target.value)}
                       helperText="Use the same seed to reproduce detector generation."
@@ -287,29 +461,97 @@ export function NsaPage() {
                   </Box>
                 </Box>
 
-                <Box sx={{ p: 2, bgcolor: BG2, borderRadius: 2, border: "1px solid rgba(34,211,238,0.15)" }}>
-                  <Typography variant="body2" sx={{ color: "#64748b", fontFamily: MONO }}>
-                    $ detector_count={form.detectorCount}{"  "}
-                    radius={form.detectorRadius}{"  "}
-                    threshold={form.selfMatchThreshold}{"  "}
-                    max_attempts={form.maxAttempts}{"  "}
+                <Box>
+                  <Typography
+                    variant="body2"
+                    sx={{ color: "#94a3b8", fontFamily: MONO, mb: 1.5 }}
+                  >
+                    $ word2vec_parameters
+                  </Typography>
+                  <Alert severity="info" sx={{ mb: 2 }}>
+                    Word2Vec is trained only on the selected SELF corpus. The
+                    evaluation dataset is not used to train the embeddings.
+                  </Alert>
+                  <Box
+                    sx={{
+                      display: "grid",
+                      gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" },
+                      gap: 2,
+                    }}
+                  >
+                    {word2vecParameters.map(
+                      ({ key, label, min, max, step, helper }) => (
+                        <TextField
+                          key={key}
+                          label={label}
+                          type="number"
+                          value={
+                            Number.isNaN(form[key] as number) ? "" : form[key]
+                          }
+                          sx={{ ...FIELD_SX, input: { min, max, step } }}
+                          onChange={(e) => setNumber(key, e.target.value)}
+                          helperText={helper}
+                        />
+                      ),
+                    )}
+                  </Box>
+                </Box>
+
+                <Box
+                  sx={{
+                    p: 2,
+                    bgcolor: BG2,
+                    borderRadius: 2,
+                    border: "1px solid rgba(34,211,238,0.15)",
+                  }}
+                >
+                  <Typography
+                    variant="body2"
+                    sx={{ color: "#64748b", fontFamily: MONO, lineHeight: 1.8 }}
+                  >
+                    $ representation=WORD2VEC{"  "}
+                    vector_size={form.word2vecVectorSize}
+                    {"  "}
+                    window={form.word2vecWindow}
+                    {"  "}
+                    min_count={form.word2vecMinCount}
+                    {"  "}
+                    epochs={form.word2vecEpochs}
+                    <br />$ detector_count={form.detectorCount}
+                    {"  "}
+                    radius={form.detectorRadius}
+                    {"  "}
+                    threshold={form.selfMatchThreshold}
+                    {"  "}
+                    max_attempts={form.maxAttempts}
+                    {"  "}
                     seed={form.randomSeed}
                   </Typography>
                 </Box>
 
                 <Button
-                  type="submit" variant="contained" size="large"
+                  type="submit"
+                  variant="contained"
+                  size="large"
                   disabled={running || Boolean(issue)}
                   sx={{
-                    fontFamily: MONO, fontWeight: 700,
-                    bgcolor: "#0e7490", "&:hover": { bgcolor: "#0891b2" },
-                    "&.Mui-disabled": { bgcolor: "rgba(14,116,144,0.3)", color: "#475569" },
+                    fontFamily: MONO,
+                    fontWeight: 700,
+                    bgcolor: "#0e7490",
+                    "&:hover": { bgcolor: "#0891b2" },
+                    "&.Mui-disabled": {
+                      bgcolor: "rgba(14,116,144,0.3)",
+                      color: "#475569",
+                    },
                   }}
                 >
                   {running ? "$ running experiment..." : "$ run_experiment()"}
                 </Button>
                 {issue && (
-                  <Typography variant="body2" sx={{ color: "#f87171", fontFamily: MONO }}>
+                  <Typography
+                    variant="body2"
+                    sx={{ color: "#f87171", fontFamily: MONO }}
+                  >
                     error: {issue}
                   </Typography>
                 )}

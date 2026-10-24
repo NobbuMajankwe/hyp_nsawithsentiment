@@ -158,17 +158,12 @@ export default function SentimentPage() {
   );
 
   async function handleRun() {
-    if (!token || selfRecords.length === 0 || running) return;
+    if (!token || selfRecords.length === 0 || running || selectedId === "") return;
     setRunning(true);
     setRunError("");
     setAnalysis(null);
     try {
-      setAnalysis(
-        await runSentimentAnalysis(
-          token,
-          selfRecords.map((r) => r.original_text as string),
-        ),
-      );
+      setAnalysis(await runSentimentAnalysis(token, selectedId as number));
     } catch (cause) {
       setRunError(errMsg(cause, "Sentiment analysis failed."));
     } finally {
@@ -202,7 +197,7 @@ export default function SentimentPage() {
           running
             ? "STATUS -> classifying feedback..."
             : analysis
-            ? `STATUS -> ${analysis.totalRecords} records classified.`
+            ? `STATUS -> ${analysis.analysedRecords} records classified.`
             : selectedId !== ""
             ? `STATUS -> ${selfRecords.length} SELF record(s) ready.`
             : "STATUS -> awaiting experiment selection..."
@@ -482,7 +477,7 @@ export default function SentimentPage() {
               gap: 1.5,
             }}
           >
-            <StatCard label="Classified" value={analysis.totalRecords} />
+            <StatCard label="Classified" value={analysis.analysedRecords} />
             <StatCard
               label="Positive"
               value={analysis.positiveCount}

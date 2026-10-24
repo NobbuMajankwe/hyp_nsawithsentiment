@@ -12,6 +12,10 @@ from nsa import (
     NSA_DEFAULT_MAX_ATTEMPTS,
     NSA_DEFAULT_RANDOM_SEED,
     NSA_DEFAULT_SELF_MATCH_THRESHOLD,
+    WORD2VEC_DEFAULT_VECTOR_SIZE,
+    WORD2VEC_DEFAULT_WINDOW,
+    WORD2VEC_DEFAULT_MIN_COUNT,
+    WORD2VEC_DEFAULT_EPOCHS,
     NegativeSelectionAlgorithm,
     NSAResponse,
     NSAResult,
@@ -61,6 +65,11 @@ class ExperimentSummary:
     detector_generation_attempts: int
     detector_acceptance_rate: float
 
+    word2vec_vector_size: int
+    word2vec_window: int
+    word2vec_min_count: int
+    word2vec_epochs: int
+
     confusion_matrix: ConfusionMatrix | None
     metrics: EvaluationMetrics | None
 
@@ -87,9 +96,19 @@ def calculate_confusion_matrix(
     ground_truth: list[str],
     predictions: list[str],
 ) -> ConfusionMatrix:
+    """
+    Build a binary confusion matrix for records that the NSA actually
+    classified as SELF or NON_SELF.
+
+    OOV records are deliberately excluded. OOV means the model could not
+    represent the record using the SELF vocabulary; it is not proof that the
+    record is anomalous.
+    """
 
     if len(ground_truth) != len(predictions):
-        raise ValueError("Ground truth and prediction lengths do not match.")
+        raise ValueError(
+            "Ground truth and prediction lengths do not match."
+        )
 
     matrix = ConfusionMatrix()
 
@@ -240,6 +259,7 @@ def get_dataset_info(
     return dataset
 
 
+
 # Experiment persistence
 
 
@@ -280,6 +300,12 @@ def create_experiment(
                 max_attempts,
                 random_seed,
 
+                text_representation,
+                word2vec_vector_size,
+                word2vec_window,
+                word2vec_min_count,
+                word2vec_epochs,
+
                 vocabulary_size,
                 self_corpus_size,
 
@@ -293,6 +319,7 @@ def create_experiment(
             (
                 %s,%s,%s,%s,%s,%s,
                 %s,%s,%s,%s,%s,%s,
+                %s,%s,%s,%s,%s,
                 %s,%s,
                 %s,%s,
                 %s,'RUNNING'
@@ -312,6 +339,11 @@ def create_experiment(
                 nsa.self_match_threshold,
                 nsa.max_attempts,
                 nsa.random_seed,
+                "WORD2VEC",
+                nsa.word2vec_vector_size,
+                nsa.word2vec_window,
+                nsa.word2vec_min_count,
+                nsa.word2vec_epochs,
                 stats.vocabulary_size,
                 stats.self_corpus_size,
                 stats.generation_attempts,
@@ -575,6 +607,7 @@ def evaluate_results(
     """
     Calculate metrics only for labelled, classifiable records.
 
+    Rules:
         - Ground truth must be SELF or NON_SELF.
         - OOV predictions are excluded from TP/TN/FP/FN.
         - OOV is reported separately by the experiment's oov_count.
@@ -615,9 +648,15 @@ def evaluate_results(
     if not labelled_pairs:
         return None, None
 
-    ground_truth = [truth for truth, _ in labelled_pairs]
+    ground_truth = [
+        truth
+        for truth, _ in labelled_pairs
+    ]
 
-    predictions = [prediction for _, prediction in labelled_pairs]
+    predictions = [
+        prediction
+        for _, prediction in labelled_pairs
+    ]
 
     matrix = calculate_confusion_matrix(
         ground_truth,
@@ -643,8 +682,17 @@ def run_experiment(
     self_match_threshold: float = NSA_DEFAULT_SELF_MATCH_THRESHOLD,
     max_attempts: int = NSA_DEFAULT_MAX_ATTEMPTS,
     random_seed: int = NSA_DEFAULT_RANDOM_SEED,
+    word2vec_vector_size: int = WORD2VEC_DEFAULT_VECTOR_SIZE,
+    word2vec_window: int = WORD2VEC_DEFAULT_WINDOW,
+    word2vec_min_count: int = WORD2VEC_DEFAULT_MIN_COUNT,
+    word2vec_epochs: int = WORD2VEC_DEFAULT_EPOCHS,
     self_corpus_dataset_id: int | None = None,
 ) -> ExperimentSummary:
+    """
+    Train Word2Vec on the explicitly selected SELF_CORPUS, train NSA in
+    that embedding space, and run it against the selected EVALUATION or
+    ANALYSIS dataset. Evaluation records are never used to train Word2Vec.
+    """
 
     experiment_started = time.perf_counter()
 
@@ -653,7 +701,21 @@ def run_experiment(
     if not experiment_name:
         raise ValueError("experiment_name cannot be blank.")
 
+    if word2vec_vector_size <= 0:
+        raise ValueError("word2vec_vector_size must be greater than 0.")
+
+    if word2vec_window <= 0:
+        raise ValueError("word2vec_window must be greater than 0.")
+
+    if word2vec_min_count <= 0:
+        raise ValueError("word2vec_min_count must be greater than 0.")
+
+    if word2vec_epochs <= 0:
+        raise ValueError("word2vec_epochs must be greater than 0.")
+
+    # -----------------------------------------------------------------
     # Evaluation / analysis dataset
+    # -----------------------------------------------------------------
 
     dataset = get_dataset_info(dataset_id)
 
@@ -662,20 +724,30 @@ def run_experiment(
         "ANALYSIS",
     }:
         raise ValueError(
-            "The experiment dataset must have research role " "EVALUATION or ANALYSIS."
+            "The experiment dataset must have research role "
+            "EVALUATION or ANALYSIS."
         )
 
     records = load_dataset_records(dataset_id)
 
     if not records:
-        raise ValueError("The selected dataset contains no feedback records.")
+        raise ValueError(
+            "The selected dataset contains no feedback records."
+        )
 
-    texts = [str(row["raw_text"]).strip() for row in records]
+    texts = [
+        str(row["raw_text"]).strip()
+        for row in records
+    ]
 
+    # -----------------------------------------------------------------
     # Explicit SELF training corpus
+    # -----------------------------------------------------------------
 
     if self_corpus_dataset_id is None:
-        raise ValueError("Select a SELF_CORPUS dataset before running the experiment.")
+        raise ValueError(
+            "Select a SELF_CORPUS dataset before running the experiment."
+        )
 
     if self_corpus_dataset_id == dataset_id:
         raise ValueError(
@@ -683,21 +755,31 @@ def run_experiment(
             "different datasets to avoid evaluation data leakage."
         )
 
-    training_dataset = get_dataset_info(self_corpus_dataset_id)
+    training_dataset = get_dataset_info(
+        self_corpus_dataset_id
+    )
 
     if training_dataset["research_role"] != "SELF_CORPUS":
-        raise ValueError(f"Dataset {self_corpus_dataset_id} is not a SELF_CORPUS.")
+        raise ValueError(
+            f"Dataset {self_corpus_dataset_id} is not a SELF_CORPUS."
+        )
 
     training_dataset_id = self_corpus_dataset_id
 
     # load_self_corpus_by_id() preserves the selected dataset but returns
     # only SELF-labelled rows when the corpus contains ground-truth labels.
-    training_corpus = load_self_corpus_by_id(training_dataset_id)
+    training_corpus = load_self_corpus_by_id(
+        training_dataset_id
+    )
 
     if not training_corpus:
-        raise RuntimeError("The selected SELF corpus contains no usable SELF records.")
+        raise RuntimeError(
+            "The selected SELF corpus contains no usable SELF records."
+        )
 
+    # -----------------------------------------------------------------
     # NSA training / cache
+    # -----------------------------------------------------------------
 
     nsa = get_nsa(
         detector_count=detector_count,
@@ -706,12 +788,20 @@ def run_experiment(
         max_attempts=max_attempts,
         random_seed=random_seed,
         corpus=training_corpus,
+        word2vec_vector_size=word2vec_vector_size,
+        word2vec_window=word2vec_window,
+        word2vec_min_count=word2vec_min_count,
+        word2vec_epochs=word2vec_epochs,
     )
 
     if nsa.training_statistics is None:
-        raise RuntimeError("NSA training statistics are unavailable.")
+        raise RuntimeError(
+            "NSA training statistics are unavailable."
+        )
 
+    # -----------------------------------------------------------------
     # Persist experiment metadata before detection
+    # -----------------------------------------------------------------
 
     experiment_id = create_experiment(
         user_id=user_id,
@@ -752,22 +842,35 @@ def run_experiment(
                 index,
             )
 
-            item_time_ms = (time.perf_counter() - item_started) * 1000
+            item_time_ms = (
+                time.perf_counter() - item_started
+            ) * 1000
 
             results.append(result)
             detection_times.append(item_time_ms)
 
-        detection_time_ms = (time.perf_counter() - detection_started) * 1000
+        detection_time_ms = (
+            time.perf_counter() - detection_started
+        ) * 1000
 
         # -------------------------------------------------------------
         # Aggregate predictions
         # -------------------------------------------------------------
 
-        self_count = sum(result.classification == "SELF" for result in results)
+        self_count = sum(
+            result.classification == "SELF"
+            for result in results
+        )
 
-        non_self_count = sum(result.classification == "NON_SELF" for result in results)
+        non_self_count = sum(
+            result.classification == "NON_SELF"
+            for result in results
+        )
 
-        oov_count = sum(result.classification == "OOV" for result in results)
+        oov_count = sum(
+            result.classification == "OOV"
+            for result in results
+        )
 
         response = NSAResponse(
             total_records=len(results),
@@ -803,7 +906,9 @@ def run_experiment(
         # Complete experiment
         # -------------------------------------------------------------
 
-        total_execution_time_ms = (time.perf_counter() - experiment_started) * 1000
+        total_execution_time_ms = (
+            time.perf_counter() - experiment_started
+        ) * 1000
 
         complete_experiment(
             experiment_id=experiment_id,
@@ -831,13 +936,27 @@ def run_experiment(
             self_count=response.self_records,
             non_self_count=response.non_self_records,
             oov_count=response.oov_records,
-            requested_detector_count=(nsa.training_statistics.requested_detectors),
-            generated_detector_count=(nsa.training_statistics.generated_detectors),
-            detector_generation_attempts=(nsa.training_statistics.generation_attempts),
-            detector_acceptance_rate=(nsa.training_statistics.detector_acceptance_rate),
+            requested_detector_count=(
+                nsa.training_statistics.requested_detectors
+            ),
+            generated_detector_count=(
+                nsa.training_statistics.generated_detectors
+            ),
+            detector_generation_attempts=(
+                nsa.training_statistics.generation_attempts
+            ),
+            detector_acceptance_rate=(
+                nsa.training_statistics.detector_acceptance_rate
+            ),
+            word2vec_vector_size=nsa.word2vec_vector_size,
+            word2vec_window=nsa.word2vec_window,
+            word2vec_min_count=nsa.word2vec_min_count,
+            word2vec_epochs=nsa.word2vec_epochs,
             confusion_matrix=confusion_matrix,
             metrics=metrics,
-            training_time_ms=(nsa.training_statistics.training_time_ms),
+            training_time_ms=(
+                nsa.training_statistics.training_time_ms
+            ),
             detection_time_ms=round(
                 detection_time_ms,
                 3,
@@ -962,6 +1081,12 @@ def list_experiments(
                 e.self_match_threshold,
 
                 e.random_seed,
+
+                e.text_representation,
+                e.word2vec_vector_size,
+                e.word2vec_window,
+                e.word2vec_min_count,
+                e.word2vec_epochs,
 
                 e.total_records,
                 e.self_count,

@@ -52,18 +52,22 @@ from nsa import (
     NSA_DEFAULT_MAX_ATTEMPTS,
     NSA_DEFAULT_RANDOM_SEED,
     NSA_DEFAULT_SELF_MATCH_THRESHOLD,
+    WORD2VEC_DEFAULT_EPOCHS,
+    WORD2VEC_DEFAULT_MIN_COUNT,
+    WORD2VEC_DEFAULT_VECTOR_SIZE,
+    WORD2VEC_DEFAULT_WINDOW,
 )
 from pydantic import BaseModel
 
-from sentiment import classify_sentiment
+from sentiment import classify_sentiment, get_sentiment_model_status
 
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="NSA Research Platform: EventSense AI",
     description=(
-        "Experimental/Research based Negative Selection Algorithm platform "
-        "for detecting non-self observations in event feedback."
+        "Experimental Negative Selection Algorithm platform using Word2Vec "
+        "for detecting non-self observations in unstructured user-generated text."
     ),
     version="1.0.0",
 )
@@ -202,25 +206,28 @@ class NsaConfigResponse(BaseModel):
 
     detectorCount: int
     detectorRadius: float
-
     selfMatchThreshold: float
-
     maxAttempts: int
-
     randomSeed: int
+
+    word2vecVectorSize: int
+    word2vecWindow: int
+    word2vecMinCount: int
+    word2vecEpochs: int
 
 
 class NsaConfigRequest(BaseModel):
 
     detectorCount: int | None = None
-
     detectorRadius: float | None = None
-
     selfMatchThreshold: float | None = None
-
     maxAttempts: int | None = None
-
     randomSeed: int | None = None
+
+    word2vecVectorSize: int | None = None
+    word2vecWindow: int | None = None
+    word2vecMinCount: int | None = None
+    word2vecEpochs: int | None = None
 
 
 class RunExperimentRequest(BaseModel):
@@ -240,6 +247,11 @@ class RunExperimentRequest(BaseModel):
     maxAttempts: int = NSA_DEFAULT_MAX_ATTEMPTS
 
     randomSeed: int = NSA_DEFAULT_RANDOM_SEED
+
+    word2vecVectorSize: int = WORD2VEC_DEFAULT_VECTOR_SIZE
+    word2vecWindow: int = WORD2VEC_DEFAULT_WINDOW
+    word2vecMinCount: int = WORD2VEC_DEFAULT_MIN_COUNT
+    word2vecEpochs: int = WORD2VEC_DEFAULT_EPOCHS
 
     selfCorpusDatasetId: int | None = None
 
@@ -347,7 +359,11 @@ def _load_nsa_config(
                 nsa_detector_radius,
                 nsa_self_match_threshold,
                 nsa_max_attempts,
-                nsa_random_seed
+                nsa_random_seed,
+                word2vec_vector_size,
+                word2vec_window,
+                word2vec_min_count,
+                word2vec_epochs
 
             FROM integration_settings
 
@@ -366,6 +382,10 @@ def _load_nsa_config(
             "selfMatchThreshold": NSA_DEFAULT_SELF_MATCH_THRESHOLD,
             "maxAttempts": NSA_DEFAULT_MAX_ATTEMPTS,
             "randomSeed": NSA_DEFAULT_RANDOM_SEED,
+            "word2vecVectorSize": WORD2VEC_DEFAULT_VECTOR_SIZE,
+            "word2vecWindow": WORD2VEC_DEFAULT_WINDOW,
+            "word2vecMinCount": WORD2VEC_DEFAULT_MIN_COUNT,
+            "word2vecEpochs": WORD2VEC_DEFAULT_EPOCHS,
         }
 
     return {
@@ -381,6 +401,26 @@ def _load_nsa_config(
             row["nsa_random_seed"]
             if row["nsa_random_seed"] is not None
             else NSA_DEFAULT_RANDOM_SEED
+        ),
+        "word2vecVectorSize": (
+            row["word2vec_vector_size"]
+            if row["word2vec_vector_size"] is not None
+            else WORD2VEC_DEFAULT_VECTOR_SIZE
+        ),
+        "word2vecWindow": (
+            row["word2vec_window"]
+            if row["word2vec_window"] is not None
+            else WORD2VEC_DEFAULT_WINDOW
+        ),
+        "word2vecMinCount": (
+            row["word2vec_min_count"]
+            if row["word2vec_min_count"] is not None
+            else WORD2VEC_DEFAULT_MIN_COUNT
+        ),
+        "word2vecEpochs": (
+            row["word2vec_epochs"]
+            if row["word2vec_epochs"] is not None
+            else WORD2VEC_DEFAULT_EPOCHS
         ),
     }
 
@@ -403,12 +443,16 @@ def _save_nsa_config(
                 nsa_self_match_threshold,
 
                 nsa_max_attempts,
-                nsa_random_seed
+                nsa_random_seed,
+                word2vec_vector_size,
+                word2vec_window,
+                word2vec_min_count,
+                word2vec_epochs
             )
 
             VALUES
             (
-                %s,%s,%s,%s,%s,%s
+                %s,%s,%s,%s,%s,%s,%s,%s,%s,%s
             )
 
             ON CONFLICT (user_id)
@@ -430,6 +474,18 @@ def _save_nsa_config(
                 nsa_random_seed =
                     EXCLUDED.nsa_random_seed,
 
+                word2vec_vector_size =
+                    EXCLUDED.word2vec_vector_size,
+
+                word2vec_window =
+                    EXCLUDED.word2vec_window,
+
+                word2vec_min_count =
+                    EXCLUDED.word2vec_min_count,
+
+                word2vec_epochs =
+                    EXCLUDED.word2vec_epochs,
+
                 updated_at =
                     CURRENT_TIMESTAMP
             """,
@@ -440,6 +496,10 @@ def _save_nsa_config(
                 config["selfMatchThreshold"],
                 config["maxAttempts"],
                 config["randomSeed"],
+                config["word2vecVectorSize"],
+                config["word2vecWindow"],
+                config["word2vecMinCount"],
+                config["word2vecEpochs"],
             ),
         )
 
@@ -450,6 +510,10 @@ def _validate_nsa_parameters(
     detector_radius: float,
     self_match_threshold: float,
     max_attempts: int,
+    word2vec_vector_size: int = WORD2VEC_DEFAULT_VECTOR_SIZE,
+    word2vec_window: int = WORD2VEC_DEFAULT_WINDOW,
+    word2vec_min_count: int = WORD2VEC_DEFAULT_MIN_COUNT,
+    word2vec_epochs: int = WORD2VEC_DEFAULT_EPOCHS,
 ) -> None:
     """
     Validate NSA parameters used by both configuration and experiment routes.
@@ -491,6 +555,30 @@ def _validate_nsa_parameters(
         raise HTTPException(
             status_code=422,
             detail="maxAttempts must be between 1 and 1,000,000.",
+        )
+
+    if not (10 <= word2vec_vector_size <= 1000):
+        raise HTTPException(
+            status_code=422,
+            detail="word2vecVectorSize must be between 10 and 1000.",
+        )
+
+    if not (1 <= word2vec_window <= 50):
+        raise HTTPException(
+            status_code=422,
+            detail="word2vecWindow must be between 1 and 50.",
+        )
+
+    if not (1 <= word2vec_min_count <= 100):
+        raise HTTPException(
+            status_code=422,
+            detail="word2vecMinCount must be between 1 and 100.",
+        )
+
+    if not (1 <= word2vec_epochs <= 1000):
+        raise HTTPException(
+            status_code=422,
+            detail="word2vecEpochs must be between 1 and 1000.",
         )
 
 
@@ -540,6 +628,26 @@ def update_nsa_config(
         "randomSeed": (
             body.randomSeed if body.randomSeed is not None else current["randomSeed"]
         ),
+        "word2vecVectorSize": (
+            body.word2vecVectorSize
+            if body.word2vecVectorSize is not None
+            else current["word2vecVectorSize"]
+        ),
+        "word2vecWindow": (
+            body.word2vecWindow
+            if body.word2vecWindow is not None
+            else current["word2vecWindow"]
+        ),
+        "word2vecMinCount": (
+            body.word2vecMinCount
+            if body.word2vecMinCount is not None
+            else current["word2vecMinCount"]
+        ),
+        "word2vecEpochs": (
+            body.word2vecEpochs
+            if body.word2vecEpochs is not None
+            else current["word2vecEpochs"]
+        ),
     }
 
     _validate_nsa_parameters(
@@ -547,6 +655,10 @@ def update_nsa_config(
         detector_radius=config["detectorRadius"],
         self_match_threshold=config["selfMatchThreshold"],
         max_attempts=config["maxAttempts"],
+        word2vec_vector_size=config["word2vecVectorSize"],
+        word2vec_window=config["word2vecWindow"],
+        word2vec_min_count=config["word2vecMinCount"],
+        word2vec_epochs=config["word2vecEpochs"],
     )
 
     _save_nsa_config(
@@ -574,6 +686,28 @@ async def upload_dataset(
     ] = Form("ANALYSIS"),
     current_user: dict = Depends(get_current_user),  # noqa: B008
 ):
+    """
+    Upload a research dataset.
+
+    Behaviour by role:
+
+    SELF_CORPUS
+        - Labelled CSV/JSON:
+          preserve SELF/NON_SELF labels in the database.
+          NSA training later uses only SELF-labelled rows.
+        - Truly unlabelled CSV/JSON:
+          save all rows unlabelled and treat the entire corpus as SELF.
+
+    EVALUATION
+        - Must be labelled.
+        - Labels are preserved for confusion-matrix metrics.
+
+    ANALYSIS
+        - Unlabelled data used for model application/analysis.
+
+    SUPPORT
+        - Supporting unlabelled data such as stop-word lists.
+    """
 
     user_id = int(current_user["sub"])
 
@@ -754,6 +888,8 @@ async def upload_labelled_dataset(
 ):
     """
     Backward-compatible labelled EVALUATION upload endpoint.
+
+    New code may use /api/datasets/upload with researchRole=EVALUATION.
     """
 
     user_id = int(current_user["sub"])
@@ -976,6 +1112,10 @@ def start_experiment(
         detector_radius=body.detectorRadius,
         self_match_threshold=body.selfMatchThreshold,
         max_attempts=body.maxAttempts,
+        word2vec_vector_size=body.word2vecVectorSize,
+        word2vec_window=body.word2vecWindow,
+        word2vec_min_count=body.word2vecMinCount,
+        word2vec_epochs=body.word2vecEpochs,
     )
 
     try:
@@ -990,6 +1130,10 @@ def start_experiment(
             self_match_threshold=(body.selfMatchThreshold),
             max_attempts=(body.maxAttempts),
             random_seed=(body.randomSeed),
+            word2vec_vector_size=(body.word2vecVectorSize),
+            word2vec_window=(body.word2vecWindow),
+            word2vec_min_count=(body.word2vecMinCount),
+            word2vec_epochs=(body.word2vecEpochs),
             self_corpus_dataset_id=(body.selfCorpusDatasetId),
         )
 
@@ -1027,6 +1171,11 @@ def start_experiment(
         "generatedDetectorCount": summary.generated_detector_count,
         "detectorGenerationAttempts": summary.detector_generation_attempts,
         "detectorAcceptanceRate": summary.detector_acceptance_rate,
+        "textRepresentation": summary.text_representation,
+        "word2vecVectorSize": summary.word2vec_vector_size,
+        "word2vecWindow": summary.word2vec_window,
+        "word2vecMinCount": summary.word2vec_min_count,
+        "word2vecEpochs": summary.word2vec_epochs,
         "trainingTimeMs": summary.training_time_ms,
         "detectionTimeMs": summary.detection_time_ms,
         "totalExecutionTimeMs": summary.total_execution_time_ms,
@@ -1247,62 +1396,306 @@ def experiment_research_summary(
     }
 
 
-class SentimentAnalyseRequest(BaseModel):
-    texts: list[str]
-
-
 class SentimentItemOut(BaseModel):
     id: int
+    feedbackId: int | None = None
+    recordIndex: int
     originalText: str
+    groundTruthLabel: str | None = None
+    nsaClassification: str
     label: str
     confidence: float
     model: str
 
 
-class SentimentAnalysisResponse(BaseModel):
-    totalRecords: int
+class ExperimentSentimentResponse(BaseModel):
+    experimentId: int
+    experimentName: str
+    datasetId: int
+
+    totalExperimentRecords: int
+    eligibleSelfRecords: int
+    excludedNonSelfRecords: int
+    excludedOovRecords: int
+
+    analysedRecords: int
+
     positiveCount: int
     negativeCount: int
     neutralCount: int
+
     results: list[SentimentItemOut]
 
 
-@sentiment_router.post(
-    "/analyse",
-    response_model=SentimentAnalysisResponse,
+class SentimentEligibilityResponse(BaseModel):
+    experimentId: int
+    experimentName: str
+    status: str
+    totalExperimentRecords: int
+    eligibleSelfRecords: int
+    excludedNonSelfRecords: int
+    excludedOovRecords: int
+
+
+def _get_completed_experiment_for_sentiment(
+    experiment_id: int,
+    user_id: int,
+) -> dict:
+    """
+    Load an experiment owned by the current user and make sure NSA
+    classification completed before sentiment analysis starts.
+    """
+
+    experiment = get_experiment(
+        experiment_id,
+        user_id,
+    )
+
+    if not experiment:
+        raise HTTPException(
+            status_code=404,
+            detail="Experiment not found.",
+        )
+
+    if experiment["status"] != "COMPLETED":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "The NSA experiment must be completed before "
+                "sentiment analysis can run."
+            ),
+        )
+
+    return experiment
+
+
+def _load_self_experiment_results(
+    experiment_id: int,
+) -> list[dict]:
+    """
+    Return only records the NSA predicted as SELF.
+
+    Important:
+        Filtering uses predicted_class, not ground_truth_label.
+
+        The hybrid pipeline must operate on what the NSA actually accepted.
+        Ground truth may be displayed for evaluation datasets but must not be
+        used to decide which records DistilBERT receives.
+    """
+
+    with get_cursor() as cur:
+        cur.execute(
+            """
+            SELECT
+                result_id,
+                feedback_id,
+                record_index,
+                original_text,
+                ground_truth_label,
+                predicted_class
+
+            FROM experiment_results
+
+            WHERE experiment_id = %s
+              AND predicted_class = 'SELF'
+
+            ORDER BY record_index
+            """,
+            (experiment_id,),
+        )
+
+        return cur.fetchall()
+
+
+@sentiment_router.get(
+    "/model-status",
 )
-def analyse_sentiment(
-    body: SentimentAnalyseRequest,
+def sentiment_model_status(
     current_user: dict = Depends(get_current_user),  # noqa: B008
 ):
-    texts = [t for t in body.texts if t and t.strip()]
-    if not texts:
+    """
+    Return pinned model metadata without forcing model inference.
+    """
+
+    return get_sentiment_model_status()
+
+
+@sentiment_router.get(
+    "/experiments/{experiment_id}/eligibility",
+    response_model=SentimentEligibilityResponse,
+)
+def sentiment_experiment_eligibility(
+    experiment_id: int,
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+):
+    """
+    Tell the frontend how many records are eligible for sentiment analysis
+    before the heavier DistilBERT inference call is made.
+    """
+
+    user_id = int(current_user["sub"])
+
+    experiment = _get_completed_experiment_for_sentiment(
+        experiment_id,
+        user_id,
+    )
+
+    eligible_records = _load_self_experiment_results(
+        experiment_id
+    )
+
+    return SentimentEligibilityResponse(
+        experimentId=experiment_id,
+        experimentName=experiment["experiment_name"],
+        status=experiment["status"],
+        totalExperimentRecords=int(
+            experiment["total_records"] or 0
+        ),
+        eligibleSelfRecords=len(eligible_records),
+        excludedNonSelfRecords=int(
+            experiment["non_self_count"] or 0
+        ),
+        excludedOovRecords=int(
+            experiment["oov_count"] or 0
+        ),
+    )
+
+
+@sentiment_router.post(
+    "/experiments/{experiment_id}/analyse",
+    response_model=ExperimentSentimentResponse,
+)
+def analyse_experiment_sentiment(
+    experiment_id: int,
+    current_user: dict = Depends(get_current_user),  # noqa: B008
+):
+    """
+    Run DistilBERT sentiment analysis on NSA-validated feedback only.
+
+    Pipeline:
+
+        completed NSA experiment
+                ↓
+        predicted_class = SELF
+                ↓
+        DistilBERT
+                ↓
+        Positive / Neutral / Negative
+
+    NON_SELF and OOV records are deliberately excluded from sentiment.
+    """
+
+    user_id = int(current_user["sub"])
+
+    experiment = _get_completed_experiment_for_sentiment(
+        experiment_id,
+        user_id,
+    )
+
+    eligible_records = _load_self_experiment_results(
+        experiment_id
+    )
+
+    if not eligible_records:
         raise HTTPException(
             status_code=422,
-            detail="No non-empty texts were provided.",
+            detail=(
+                "No validated SELF records were returned. "
+                "Run an NSA experiment with accepted SELF records first."
+            ),
+        )
+
+    texts = [
+        str(record["original_text"]).strip()
+        for record in eligible_records
+    ]
+
+    if any(not text for text in texts):
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "The experiment contains an empty SELF record and "
+                "cannot be sent to sentiment analysis."
+            ),
         )
 
     try:
-        raw = classify_sentiment(texts)
-    except (RuntimeError, TypeError, ValueError) as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-
-    results = [
-        SentimentItemOut(
-            id=index + 1,
-            originalText=result.text,
-            label=result.label,
-            confidence=result.confidence,
-            model=result.model,
+        sentiment_results = classify_sentiment(
+            texts
         )
-        for index, result in enumerate(raw)
-    ]
 
-    return SentimentAnalysisResponse(
-        totalRecords=len(results),
-        positiveCount=sum(1 for r in results if r.label == "Positive"),
-        negativeCount=sum(1 for r in results if r.label == "Negative"),
-        neutralCount=sum(1 for r in results if r.label == "Neutral"),
+    except (RuntimeError, TypeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=str(exc),
+        ) from exc
+
+    if len(sentiment_results) != len(eligible_records):
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "Sentiment result count does not match the number "
+                "of eligible SELF records."
+            ),
+        )
+
+    results: list[SentimentItemOut] = []
+
+    for record, sentiment_result in zip(
+        eligible_records,
+        sentiment_results,
+    ):
+        results.append(
+            SentimentItemOut(
+                id=int(record["result_id"]),
+                feedbackId=(
+                    int(record["feedback_id"])
+                    if record["feedback_id"] is not None
+                    else None
+                ),
+                recordIndex=int(record["record_index"]),
+                originalText=sentiment_result.text,
+                groundTruthLabel=record["ground_truth_label"],
+                nsaClassification=record["predicted_class"],
+                label=sentiment_result.label,
+                confidence=sentiment_result.confidence,
+                model=sentiment_result.model,
+            )
+        )
+
+    positive_count = sum(
+        result.label == "Positive"
+        for result in results
+    )
+
+    negative_count = sum(
+        result.label == "Negative"
+        for result in results
+    )
+
+    neutral_count = sum(
+        result.label == "Neutral"
+        for result in results
+    )
+
+    return ExperimentSentimentResponse(
+        experimentId=experiment_id,
+        experimentName=experiment["experiment_name"],
+        datasetId=int(experiment["dataset_id"]),
+        totalExperimentRecords=int(
+            experiment["total_records"] or 0
+        ),
+        eligibleSelfRecords=len(eligible_records),
+        excludedNonSelfRecords=int(
+            experiment["non_self_count"] or 0
+        ),
+        excludedOovRecords=int(
+            experiment["oov_count"] or 0
+        ),
+        analysedRecords=len(results),
+        positiveCount=positive_count,
+        negativeCount=negative_count,
+        neutralCount=neutral_count,
         results=results,
     )
 

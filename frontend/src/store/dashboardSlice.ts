@@ -1,16 +1,16 @@
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
-import { fetchDashboardSummary, type DashboardSummary } from '../services/api';
+
+// fetchDashboardSummary is not yet implemented in the API layer.
+// This slice is intentionally excluded from the store until a
+// GET /api/dashboard endpoint is added to the backend.
+type DashboardSummary = Record<string, unknown>;
 
 // ── Async thunk ──────────────────────────────────────────────────────────────
 
 export const loadDashboard = createAsyncThunk<DashboardSummary, string>(
   'dashboard/load',
-  async (token, { rejectWithValue }) => {
-    try {
-      return await fetchDashboardSummary(token);
-    } catch {
-      return rejectWithValue('Could not load dashboard data.');
-    }
+  async (_token, { rejectWithValue }) => {
+    return rejectWithValue('Dashboard endpoint not yet implemented.');
   },
 );
 

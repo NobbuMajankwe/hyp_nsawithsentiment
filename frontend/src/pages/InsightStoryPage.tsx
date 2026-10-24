@@ -909,13 +909,12 @@ export function InsightStoryPage() {
   );
 
   async function handleRunSentiment() {
-    if (!token || selfRecords.length === 0 || running) return;
+    if (!token || selfRecords.length === 0 || running || selectedId === "") return;
     setRunning(true);
     setRunError("");
     setSentimentResult(null);
     try {
-      const texts = selfRecords.map((r) => r.original_text as string);
-      setSentimentResult(await runSentimentAnalysis(token, texts));
+      setSentimentResult(await runSentimentAnalysis(token, selectedId as number));
     } catch (cause) {
       setRunError(errMsg(cause, "Sentiment analysis failed."));
     } finally {
@@ -965,7 +964,7 @@ export function InsightStoryPage() {
       negative: sentimentResult.negativeCount,
       neutral: sentimentResult.neutralCount,
       anomalyRate: metrics.anomalyRate,
-      sentimentTotal: sentimentResult.totalRecords,
+      sentimentTotal: sentimentResult.analysedRecords,
     });
   }, [sentimentResult, summary, metrics, experiments, selectedId]);
 
@@ -1274,7 +1273,7 @@ export function InsightStoryPage() {
                     >
                       <KpiCard
                         label="Classified"
-                        value={sentimentResult.totalRecords}
+                        value={sentimentResult.analysedRecords}
                       />
                       <KpiCard
                         label="Positive"
@@ -1413,7 +1412,7 @@ export function InsightStoryPage() {
                       >
                         records_analysed:{" "}
                         <Box component="span" sx={{ color: "#f8fafc" }}>
-                          {sentimentResult.totalRecords}
+                          {sentimentResult.analysedRecords}
                         </Box>
                       </Typography>
                     </Box>
@@ -1444,7 +1443,7 @@ export function InsightStoryPage() {
               />
               <KpiCard
                 label="records_analysed"
-                value={sentimentResult.totalRecords}
+                value={sentimentResult.analysedRecords}
                 accent="#22d3ee"
                 sub="passed NSA filter"
               />
@@ -1502,7 +1501,7 @@ export function InsightStoryPage() {
                   oov={metrics.oov}
                 />
                 <SentimentBreakdown
-                  total={sentimentResult.totalRecords}
+                  total={sentimentResult.analysedRecords}
                   positive={sentimentResult.positiveCount}
                   negative={sentimentResult.negativeCount}
                   neutral={sentimentResult.neutralCount}
@@ -1591,7 +1590,7 @@ export function InsightStoryPage() {
             <ExportCard
               experimentName={selectedExp?.experiment_name ?? `#${selectedId}`}
               generatedAt={generatedAt}
-              totalRecords={sentimentResult.totalRecords}
+              totalRecords={sentimentResult.analysedRecords}
               healthScore={metrics.healthScore}
             />
           </>
