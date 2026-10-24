@@ -5,5 +5,8 @@ psycopg2-binary==2.9.10
 bcrypt==4.2.1
 python-multipart==0.0.20
 nltk==3.9.1
-scikit-learn==1.6.1
 httpx==0.28.1
+transformers==4.52.4
+torch==2.7.1
+gensim
+langdetect

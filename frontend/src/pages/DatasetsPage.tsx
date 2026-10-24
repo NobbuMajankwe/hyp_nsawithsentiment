@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 import {
   useEffect,
   useRef,
@@ -51,9 +52,9 @@ const FIELD_SX = {
 type UploadRole = "SELF_CORPUS" | "EVALUATION" | "ANALYSIS";
 const LIMIT_BYTES = 100 * 1024 * 1024;
 const roleHelp: Record<UploadRole, string> = {
-  SELF_CORPUS:  "Normal feedback used to define the self space and train detectors. CSV or JSON; no labels.",
-  EVALUATION:   "Held-out feedback with known SELF or NON_SELF labels. Upload a CSV with text and label columns.",
-  ANALYSIS:     "Unlabelled feedback for predictions. Evaluation metrics need labelled data.",
+  SELF_CORPUS:  "Legitimate comments used to define SELF and train Word2Vec and NSA. Labelled CSV files are supported; only SELF-labelled rows are used for training.",
+  EVALUATION:   "Held-out comments with known SELF or NON_SELF labels. Upload a CSV with text and label columns.",
+  ANALYSIS:     "Unlabelled text for predictions. Evaluation metrics require labelled data.",
 };
 const roleChipColor: Record<UploadRole, string> = {
   SELF_CORPUS: "#22d3ee",

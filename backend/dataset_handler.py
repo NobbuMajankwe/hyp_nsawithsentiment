@@ -40,7 +40,16 @@ TEXT_FIELD_NAMES = (
     "v2",
 )
 
-LABEL_FIELD_NAMES = ("label", "ground_truth", "target", "class", "category", "v1", "id")
+LABEL_FIELD_NAMES = (
+    "label",
+    "ground_truth",
+    "target",
+    "class",
+    "category",
+    "v1",
+    "id",
+    "class",
+)
 
 VALID_RESEARCH_ROLES = {
     "SELF_CORPUS",
@@ -120,6 +129,8 @@ def _normalise_ground_truth(
         "SELF": "SELF",
         "NORMAL": "SELF",
         "HAM": "SELF",
+        "1": "NON_SELF",
+        "0": "SELF",
         "NON_SELF": "NON_SELF",
         "NONSELF": "NON_SELF",
         "ANOMALY": "NON_SELF",
@@ -211,7 +222,7 @@ def parse_csv_file(
             raise DatasetParseError("CSV file is empty or has no headers.")
 
         # Remove empty/blank headers.
-        
+
         fieldnames = [
             str(field).strip()
             for field in raw_fieldnames
@@ -351,7 +362,10 @@ def parse_labelled_csv_file(
     encoding: str = "utf-8",
 ) -> list[dict[str, str]]:
     """
-    Parse a labelled evaluation dataset.
+    Parse a labelled CSV dataset.
+
+    The returned labels are normalised to SELF or NON_SELF.
+    This parser is suitable for both SELF_CORPUS and EVALUATION uploads.
     """
 
     # Decode file
@@ -441,7 +455,7 @@ def parse_labelled_csv_file(
 
         if label_column is None:
             raise DatasetParseError(
-                "Evaluation datasets must contain "
+                "Labelled datasets must contain "
                 "a label column. "
                 f"Available columns: {fieldnames}"
             )
@@ -864,11 +878,13 @@ def save_labelled_dataset_to_db(
     records: list[dict[str, str]],
     file_path: str | None = None,
     description: str | None = None,
+    research_role: ResearchRole = "EVALUATION",
 ) -> int:
     """
     Persist a labelled EVALUATION dataset.
 
-    Expected records:
+
+    Expected record format:
 
         {
             "text": "...",
@@ -876,14 +892,20 @@ def save_labelled_dataset_to_db(
         }
     """
 
-    if not records:
+    role = _validate_research_role(research_role)
 
-        raise ValueError("Evaluation dataset " "contains no records.")
+    if role not in {"SELF_CORPUS", "EVALUATION"}:
+        raise ValueError(
+            "A labelled dataset must use research_role "
+            "'SELF_CORPUS' or 'EVALUATION'."
+        )
+
+    if not records:
+        raise ValueError("Labelled dataset contains no records.")
 
     validated: list[dict[str, str]] = []
 
     for record in records:
-
         text = str(record.get("text", "")).strip()
 
         if not text:
@@ -892,9 +914,8 @@ def save_labelled_dataset_to_db(
         label = _normalise_ground_truth(record.get("label"))
 
         if label is None:
-
             raise ValueError(
-                "Every evaluation record " "must have a ground-truth " "label."
+                "Every labelled record must have a ground-truth label."
             )
 
         validated.append(
@@ -905,11 +926,9 @@ def save_labelled_dataset_to_db(
         )
 
     if not validated:
-
-        raise ValueError("Evaluation dataset contains " "no valid records.")
+        raise ValueError("Labelled dataset contains no valid records.")
 
     with get_cursor(commit=True) as cur:
-
         cur.execute(
             """
             INSERT INTO datasets
@@ -927,7 +946,7 @@ def save_labelled_dataset_to_db(
             (
                 %s,%s,%s,%s,
                 %s,'LOADED',
-                'EVALUATION',
+                %s,
                 %s
             )
             RETURNING dataset_id
@@ -938,6 +957,7 @@ def save_labelled_dataset_to_db(
                 description,
                 file_path,
                 len(validated),
+                role,
                 user_id,
             ),
         )
@@ -945,7 +965,6 @@ def save_labelled_dataset_to_db(
         dataset_id = int(cur.fetchone()["dataset_id"])
 
         for record in validated:
-
             cur.execute(
                 """
                 INSERT INTO feedback_records
@@ -1233,10 +1252,34 @@ def get_self_corpus_dataset() -> dict | None:
     if not row:
         return None
 
+    dataset_id = row["dataset_id"]
+
+    with get_cursor() as cur:
+
+        cur.execute(
+            """
+            SELECT
+                COUNT(*) FILTER (WHERE ground_truth_label IS NOT NULL) AS labelled_count,
+                COUNT(*) FILTER (WHERE ground_truth_label = 'SELF')    AS self_count
+            FROM feedback_records
+            WHERE dataset_id = %s
+            """,
+            (dataset_id,),
+        )
+
+        counts = cur.fetchone()
+
+    labelled_count = int(counts["labelled_count"])
+    self_count = int(counts["self_count"])
+
+    # If the dataset is fully unlabelled, every record is treated as SELF.
+    training_records = self_count if labelled_count > 0 else int(row["total_records"])
+
     return {
-        "id": row["dataset_id"],
+        "id": dataset_id,
         "name": row["source_name"],
         "totalRecords": row["total_records"],
+        "trainingRecords": training_records,
         "loadedAt": (row["loaded_at"].isoformat() if row["loaded_at"] else None),
     }
 
@@ -1265,28 +1308,157 @@ def load_self_corpus() -> list[str]:
         dataset = cur.fetchone()
 
         if not dataset:
+            raise RuntimeError("No SELF_CORPUS dataset has been configured.")
 
-            raise RuntimeError("No SELF_CORPUS dataset " "has been configured.")
+        dataset_id = dataset["dataset_id"]
 
+        # Check whether this dataset has any labelled records.
         cur.execute(
             """
-            SELECT raw_text
+            SELECT COUNT(*) AS labelled_count
             FROM feedback_records
-
             WHERE dataset_id = %s
-
-            ORDER BY feedback_id
+              AND ground_truth_label IS NOT NULL
             """,
-            (dataset["dataset_id"],),
+            (dataset_id,),
         )
+
+        labelled_count = int(cur.fetchone()["labelled_count"])
+
+        if labelled_count > 0:
+            # Mixed dataset: only SELF-labelled records define the self-space.
+            cur.execute(
+                """
+                SELECT raw_text
+                FROM feedback_records
+                WHERE dataset_id = %s
+                  AND ground_truth_label = 'SELF'
+                  AND raw_text IS NOT NULL
+                  AND BTRIM(raw_text) <> ''
+                ORDER BY feedback_id
+                """,
+                (dataset_id,),
+            )
+        else:
+            # Fully unlabelled: treat every record as self.
+            cur.execute(
+                """
+                SELECT raw_text
+                FROM feedback_records
+                WHERE dataset_id = %s
+                  AND raw_text IS NOT NULL
+                  AND BTRIM(raw_text) <> ''
+                ORDER BY feedback_id
+                """,
+                (dataset_id,),
+            )
 
         records = cur.fetchall()
 
     if not records:
+        raise RuntimeError(
+            "The SELF corpus contains no SELF records. "
+            "Check that the dataset includes records labelled 'SELF' (class 0)."
+        )
 
-        raise RuntimeError("The SELF corpus contains " "no feedback records.")
+    return [str(row["raw_text"]).strip() for row in records]
 
-    return [row["raw_text"] for row in records]
+
+def load_self_corpus_by_id(dataset_id: int) -> list[str]:
+    """
+    Load raw text for a specific SELF_CORPUS dataset by its ID.
+
+    Unlike load_self_corpus() which always picks the most-recently-uploaded
+    SELF_CORPUS dataset, this function lets the caller choose exactly which
+    uploaded self corpus to use for training.
+
+    When the dataset contains labelled records (ground_truth_label is NOT NULL),
+    only records labelled SELF are returned so that NON_SELF entries in a
+    mixed corpus are never used to define the self-space.  When all records are
+    unlabelled (NULL) the full dataset is returned as-is, because the entire
+    corpus is assumed to represent normal/self behaviour.
+
+    Raises:
+        ValueError: if the dataset does not exist or is not a SELF_CORPUS.
+        RuntimeError: if the dataset has no usable SELF records.
+    """
+
+    with get_cursor() as cur:
+
+        cur.execute(
+            """
+            SELECT dataset_id, research_role
+            FROM datasets
+            WHERE dataset_id = %s
+            LIMIT 1
+            """,
+            (dataset_id,),
+        )
+
+        dataset = cur.fetchone()
+
+    if not dataset:
+        raise ValueError(f"Dataset {dataset_id} was not found.")
+
+    if dataset["research_role"] != "SELF_CORPUS":
+        raise ValueError(
+            f"Dataset {dataset_id} has role "
+            f"'{dataset['research_role']}', not 'SELF_CORPUS'."
+        )
+
+    with get_cursor() as cur:
+
+        # Check whether this dataset has any labelled records at all.
+        cur.execute(
+            """
+            SELECT COUNT(*) AS labelled_count
+            FROM feedback_records
+            WHERE dataset_id = %s
+              AND ground_truth_label IS NOT NULL
+            """,
+            (dataset_id,),
+        )
+
+        labelled_count = int(cur.fetchone()["labelled_count"])
+
+        if labelled_count > 0:
+            # Mixed dataset: only keep SELF-labelled entries for training.
+            cur.execute(
+                """
+                SELECT raw_text
+                FROM feedback_records
+                WHERE dataset_id = %s
+                  AND ground_truth_label = 'SELF'
+                  AND raw_text IS NOT NULL
+                  AND BTRIM(raw_text) <> ''
+                ORDER BY feedback_id
+                """,
+                (dataset_id,),
+            )
+        else:
+            # Fully unlabelled corpus: treat every record as self.
+            cur.execute(
+                """
+                SELECT raw_text
+                FROM feedback_records
+                WHERE dataset_id = %s
+                  AND raw_text IS NOT NULL
+                  AND BTRIM(raw_text) <> ''
+                ORDER BY feedback_id
+                """,
+                (dataset_id,),
+            )
+
+        records = cur.fetchall()
+
+    if not records:
+        raise RuntimeError(
+            f"SELF_CORPUS dataset {dataset_id} contains no SELF records "
+            "to use for training. Check that the dataset includes records "
+            "labelled 'SELF' (class 0)."
+        )
+
+    return [str(row["raw_text"]).strip() for row in records]
 
 
 def get_dataset_label_distribution(

@@ -297,7 +297,40 @@ CREATE TABLE IF NOT EXISTS experiment_runs (
         NOT NULL,
 
     /*
+        TEXT REPRESENTATION
+
+        New experiments use Word2Vec embeddings. Historical experiments may
+        have NULL representation metadata when they were created before these
+        fields were introduced.
+    */
+
+    text_representation VARCHAR(30)
+        DEFAULT 'WORD2VEC'
+        CHECK (
+            text_representation IS NULL
+            OR text_representation IN (
+                'WORD2VEC',
+                'BAG_OF_WORDS'
+            )
+        ),
+
+    word2vec_vector_size INTEGER
+        DEFAULT 100,
+
+    word2vec_window INTEGER
+        DEFAULT 5,
+
+    word2vec_min_count INTEGER
+        DEFAULT 1,
+
+    word2vec_epochs INTEGER
+        DEFAULT 50,
+
+    /*
         FEATURE SPACE INFORMATION
+
+        vocabulary_size now records the Word2Vec vocabulary size for new
+        experiments. It is kept for compatibility with historical runs.
     */
 
     vocabulary_size INTEGER,
@@ -479,6 +512,9 @@ CREATE TABLE IF NOT EXISTS experiment_results (
 
     /*
         Actual NSA prediction.
+
+        OOV is a separate representation state. It must not be treated as
+        NON_SELF when calculating the evaluation confusion matrix.
     */
 
     predicted_class VARCHAR(20)
@@ -672,22 +708,51 @@ CREATE TABLE IF NOT EXISTS integration_settings (
 
     /*
         NSA research configuration.
+
+        The current implementation represents each comment with an averaged,
+        L2-normalised Word2Vec embedding and uses cosine distance. Word2Vec is
+        trained only on the selected SELF corpus for each experiment.
+
+        NSA defaults:
+            detector_count       = 200
+            detector_radius      = 0.20
+            self_match_threshold = 0.30
+            max_attempts         = 10000
+            random_seed          = 42
+
+        Word2Vec defaults:
+            vector_size          = 100
+            window               = 5
+            min_count            = 1
+            epochs               = 50
     */
 
     nsa_detector_count INTEGER
         DEFAULT 200,
 
     nsa_detector_radius NUMERIC(12,8)
-        DEFAULT 0.40,
+        DEFAULT 0.20,
 
     nsa_self_match_threshold NUMERIC(12,8)
-        DEFAULT 0.75,
+        DEFAULT 0.30,
 
     nsa_max_attempts INTEGER
         DEFAULT 10000,
 
     nsa_random_seed INTEGER
         DEFAULT 42,
+
+    word2vec_vector_size INTEGER
+        DEFAULT 100,
+
+    word2vec_window INTEGER
+        DEFAULT 5,
+
+    word2vec_min_count INTEGER
+        DEFAULT 1,
+
+    word2vec_epochs INTEGER
+        DEFAULT 50,
 
     /*
         Optional external NSA endpoint.
@@ -753,6 +818,10 @@ ON feedback_records(dataset_id);
 
 CREATE INDEX IF NOT EXISTS idx_feedback_ground_truth
 ON feedback_records(ground_truth_label);
+
+
+CREATE INDEX IF NOT EXISTS idx_feedback_dataset_ground_truth
+ON feedback_records(dataset_id, ground_truth_label);
 
 
 CREATE INDEX IF NOT EXISTS idx_dataset_research_role
@@ -835,11 +904,11 @@ ADD COLUMN IF NOT EXISTS ground_truth_label VARCHAR(20);
 MIGRATE_INTEGRATION_SETTINGS = """
 ALTER TABLE integration_settings
 ADD COLUMN IF NOT EXISTS nsa_detector_radius NUMERIC(12,8)
-DEFAULT 0.40;
+DEFAULT 0.20;
 
 ALTER TABLE integration_settings
 ADD COLUMN IF NOT EXISTS nsa_self_match_threshold NUMERIC(12,8)
-DEFAULT 0.75;
+DEFAULT 0.30;
 
 ALTER TABLE integration_settings
 ADD COLUMN IF NOT EXISTS nsa_max_attempts INTEGER
@@ -850,14 +919,89 @@ ADD COLUMN IF NOT EXISTS nsa_random_seed INTEGER
 DEFAULT 42;
 
 ALTER TABLE integration_settings
+ADD COLUMN IF NOT EXISTS word2vec_vector_size INTEGER
+DEFAULT 100;
+
+ALTER TABLE integration_settings
+ADD COLUMN IF NOT EXISTS word2vec_window INTEGER
+DEFAULT 5;
+
+ALTER TABLE integration_settings
+ADD COLUMN IF NOT EXISTS word2vec_min_count INTEGER
+DEFAULT 1;
+
+ALTER TABLE integration_settings
+ADD COLUMN IF NOT EXISTS word2vec_epochs INTEGER
+DEFAULT 50;
+
+ALTER TABLE integration_settings
 ADD COLUMN IF NOT EXISTS nsa_api_url TEXT;
 """
 
 
 # CREATE TABLE IF NOT EXISTS does not update tables created by earlier versions.
 # Keep these changes before CREATE_INDEXES, which references the new columns.
-# Columns added to tables with existing rows remain nullable; new application
-# writes populate them. Do not infer a training dataset from legacy dataset_id.
+#
+# training_dataset_id remains nullable at database level for legacy experiment
+# rows. New experiments require an explicitly selected SELF_CORPUS in the
+# application layer. Do not infer a training dataset from legacy dataset_id.
+MIGRATE_NSA_COSINE_DEFAULTS = """
+-- Align stored user configuration with the cosine-distance NSA defaults.
+--
+-- IMPORTANT:
+-- Historical experiment_runs are not changed. Their stored parameters are
+-- part of the research record and must remain reproducible.
+
+ALTER TABLE integration_settings
+    ALTER COLUMN nsa_detector_count SET DEFAULT 200,
+    ALTER COLUMN nsa_detector_radius SET DEFAULT 0.20,
+    ALTER COLUMN nsa_self_match_threshold SET DEFAULT 0.30,
+    ALTER COLUMN nsa_max_attempts SET DEFAULT 10000,
+    ALTER COLUMN nsa_random_seed SET DEFAULT 42;
+
+-- Earlier versions created new user settings with exactly 0.40 / 0.75.
+-- Update only that legacy default pair. Other custom values are preserved.
+UPDATE integration_settings
+SET
+    nsa_detector_radius = 0.20,
+    nsa_self_match_threshold = 0.30,
+    updated_at = CURRENT_TIMESTAMP
+WHERE nsa_detector_radius = 0.40
+  AND nsa_self_match_threshold = 0.75;
+"""
+
+
+MIGRATE_WORD2VEC_EXPERIMENT_METADATA = """
+-- Add Word2Vec metadata required by new experiments.
+--
+-- IMPORTANT:
+-- Do not backfill historical experiment rows as WORD2VEC. Older experiments
+-- may have used the previous bag-of-words representation. Leaving these new
+-- fields NULL preserves the historical research record. New experiment writes
+-- explicitly store WORD2VEC and the exact embedding settings.
+
+ALTER TABLE experiment_runs
+    ADD COLUMN IF NOT EXISTS text_representation VARCHAR(30),
+    ADD COLUMN IF NOT EXISTS word2vec_vector_size INTEGER,
+    ADD COLUMN IF NOT EXISTS word2vec_window INTEGER,
+    ADD COLUMN IF NOT EXISTS word2vec_min_count INTEGER,
+    ADD COLUMN IF NOT EXISTS word2vec_epochs INTEGER;
+
+ALTER TABLE experiment_runs
+    ALTER COLUMN text_representation SET DEFAULT 'WORD2VEC',
+    ALTER COLUMN word2vec_vector_size SET DEFAULT 100,
+    ALTER COLUMN word2vec_window SET DEFAULT 5,
+    ALTER COLUMN word2vec_min_count SET DEFAULT 1,
+    ALTER COLUMN word2vec_epochs SET DEFAULT 50;
+
+ALTER TABLE integration_settings
+    ALTER COLUMN word2vec_vector_size SET DEFAULT 100,
+    ALTER COLUMN word2vec_window SET DEFAULT 5,
+    ALTER COLUMN word2vec_min_count SET DEFAULT 1,
+    ALTER COLUMN word2vec_epochs SET DEFAULT 50;
+"""
+
+
 MIGRATE_EXISTING_RESEARCH_TABLES = """
 ALTER TABLE experiment_runs
     ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(user_id),
@@ -975,6 +1119,10 @@ SCHEMA_STATEMENTS = (
     MIGRATE_FEEDBACK_GROUND_TRUTH,
 
     MIGRATE_INTEGRATION_SETTINGS,
+
+    MIGRATE_NSA_COSINE_DEFAULTS,
+
+    MIGRATE_WORD2VEC_EXPERIMENT_METADATA,
 
     MIGRATE_EXISTING_RESEARCH_TABLES,
 

@@ -109,7 +109,10 @@ export interface NsaConfig {
   selfMatchThreshold: number;
   maxAttempts: number;
   randomSeed: number;
-  apiUrl?: string | null;
+  word2vecVectorSize: number;
+  word2vecWindow: number;
+  word2vecMinCount: number;
+  word2vecEpochs: number;
 }
 export async function fetchNsaConfig(token: string): Promise<NsaConfig> {
   return (
@@ -261,6 +264,11 @@ export interface RunRequest {
   selfMatchThreshold: number;
   maxAttempts: number;
   randomSeed: number;
+  selfCorpusDatasetId?: number | null;
+  word2vecVectorSize?: number;
+  word2vecWindow?: number;
+  word2vecMinCount?: number;
+  word2vecEpochs?: number;
 }
 export type RunExperimentRequest = RunRequest;
 export interface EvaluationMetrics {
@@ -287,6 +295,11 @@ export interface RunSummary {
   trainingTimeMs: MetricValue;
   detectionTimeMs: MetricValue;
   totalExecutionTimeMs: MetricValue;
+  textRepresentation?: string;
+  word2vecVectorSize?: number;
+  word2vecWindow?: number;
+  word2vecMinCount?: number;
+  word2vecEpochs?: number;
   confusionMatrix: {
     truePositive: number;
     trueNegative: number;
@@ -304,6 +317,11 @@ export interface Experiment extends Record<string, unknown> {
   training_dataset_id?: number | null;
   experiment_description?: string | null;
   training_corpus_hash?: string | null;
+  text_representation?: string | null;
+  word2vec_vector_size?: number | null;
+  word2vec_window?: number | null;
+  word2vec_min_count?: number | null;
+  word2vec_epochs?: number | null;
   accuracy?: MetricValue;
   precision_score?: MetricValue;
   recall_score?: MetricValue;
@@ -335,6 +353,11 @@ export interface ResearchSummary extends Record<string, unknown> {
     selfMatchThreshold: MetricValue;
     maxAttempts: number;
     randomSeed: number;
+    textRepresentation?: string | null;
+    word2vecVectorSize?: number | null;
+    word2vecWindow?: number | null;
+    word2vecMinCount?: number | null;
+    word2vecEpochs?: number | null;
   };
   featureSpace: { vocabularySize: number; selfCorpusSize: number };
   detectorGeneration: { attempts: number; acceptanceRate: MetricValue };
@@ -444,37 +467,70 @@ export async function getDetectors(
 }
 
 // Legacy shape used by SignalSummaryPanel (customer-facing flow).
+// Kept for reference only — not used by any active page.
 export interface AnalyseResponse {
   totalRecords: number;
   validRecords: number;
   suspiciousRecords: number;
 }
 
-// Sentiment analysis — POST /api/sentiment/analyse
-// Source texts come from the SELF-classified records of a chosen experiment.
+// Sentiment analysis — POST /api/sentiment/experiments/{experimentId}/analyse
+// The backend derives texts from the NSA-SELF records of the experiment;
+// no request body is needed. Texts are NOT sent from the frontend.
 export type SentimentLabel = "Positive" | "Negative" | "Neutral";
 export interface SentimentItem {
   id: number;
+  feedbackId: number | null;
+  recordIndex: number;
   originalText: string;
+  groundTruthLabel: string | null;
+  nsaClassification: string;
   label: SentimentLabel;
   confidence: number;
   model: string;
 }
 export interface SentimentAnalysisResponse {
-  totalRecords: number;
+  experimentId: number;
+  experimentName: string;
+  datasetId: number;
+  totalExperimentRecords: number;
+  eligibleSelfRecords: number;
+  excludedNonSelfRecords: number;
+  excludedOovRecords: number;
+  analysedRecords: number;
   positiveCount: number;
   negativeCount: number;
   neutralCount: number;
   results: SentimentItem[];
 }
+export interface SentimentEligibilityResponse {
+  experimentId: number;
+  experimentName: string;
+  status: string;
+  totalExperimentRecords: number;
+  eligibleSelfRecords: number;
+  excludedNonSelfRecords: number;
+  excludedOovRecords: number;
+}
+export async function getExperimentSentimentEligibility(
+  token: string,
+  experimentId: number,
+): Promise<SentimentEligibilityResponse> {
+  return (
+    await apiClient.get<SentimentEligibilityResponse>(
+      `/api/sentiment/experiments/${experimentId}/eligibility`,
+      { headers: authHeader(token) },
+    )
+  ).data;
+}
 export async function runSentimentAnalysis(
   token: string,
-  texts: string[],
+  experimentId: number,
 ): Promise<SentimentAnalysisResponse> {
   return (
     await apiClient.post<SentimentAnalysisResponse>(
-      "/api/sentiment/analyse",
-      { texts },
+      `/api/sentiment/experiments/${experimentId}/analyse`,
+      undefined,
       {
         headers: authHeader(token),
         // Model loading on the first call can take a while.
