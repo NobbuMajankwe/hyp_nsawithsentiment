@@ -59,15 +59,8 @@ class SentimentResult:
 
 
 def _load_model() -> tuple[Any, Any, Any, Any]:
-    """
-    Load the pinned tokenizer/model once.
-
-    Returns:
-        tokenizer
-        model
-        torch
-        device
-    """
+    # Load the pinned tokenizer and model once.
+    # Returns: tokenizer, model, torch, device
     global _tokenizer, _model, _torch, _device
 
     if (
@@ -145,10 +138,7 @@ def _load_model() -> tuple[Any, Any, Any, Any]:
 
 
 def _label_map(model: Any) -> dict[int, str]:
-    """
-    Read the checkpoint's own id2label mapping and verify that it exposes
-    exactly the three sentiment classes used by this project.
-    """
+    # Read the checkpoint's id2label mapping and verify it has the 3 expected labels.
     raw = getattr(model.config, "id2label", None)
 
     if not isinstance(raw, dict):
@@ -188,9 +178,7 @@ def _label_map(model: Any) -> dict[int, str]:
 
 
 def _validate_texts(texts: list[str]) -> list[str]:
-    """
-    Validate inputs while preserving order and original text.
-    """
+    # Validate inputs while preserving order and original text.
     if not isinstance(texts, list):
         raise TypeError("texts must be a list of strings.")
 
@@ -211,10 +199,7 @@ def _validate_texts(texts: list[str]) -> list[str]:
 def _classify_batch(
     texts: list[str],
 ) -> list[tuple[str, float]]:
-    """
-    Classify one batch.
-    Confidence is returned as a percentage in the range 0-100.
-    """
+    # Classify one batch. Confidence is a percentage 0–100.
     tokenizer, model, torch, device = _load_model()
     labels = _label_map(model)
 
@@ -228,9 +213,7 @@ def _classify_batch(
 
     encoded = {key: value.to(device) for key, value in encoded.items()}
 
-    # Keep inference for the shared model instance serialised. This avoids
-    # overlapping requests mutating accelerator state while preserving the
-    # single lazy-loaded model.
+    # Keep inference serialised to avoid concurrent requests mutating accelerator state.
     with _inference_lock:
         with torch.inference_mode():
             logits = model(**encoded).logits
@@ -282,9 +265,7 @@ def _classify_batch(
 def classify_sentiment(
     texts: list[str],
 ) -> list[SentimentResult]:
-    """
-    Run three-class sentiment analysis.
-    """
+    # Run three-class sentiment analysis.
     validated = _validate_texts(texts)
 
     if not validated:
@@ -336,9 +317,7 @@ def classify_sentiment(
 
 
 def get_sentiment_model_status() -> dict[str, str | bool | int]:
-    """
-    Return model metadata without forcing the model to download/load.
-    """
+    # Return model metadata without loading or downloading the model.
     return {
         "model": MODEL_ID,
         "revision": MODEL_REVISION,

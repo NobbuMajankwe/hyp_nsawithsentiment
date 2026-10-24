@@ -71,10 +71,7 @@ VALID_GROUND_TRUTH_LABELS = {
 def _normalise_headers(
     fieldnames: list[str],
 ) -> dict[str, str]:
-    """
-    Map lowercase header names to their original
-    case-sensitive column names.
-    """
+    # Map lowercase header names to their original case-sensitive names.
 
     return {field.strip().lower(): field for field in fieldnames if field}
 
@@ -83,9 +80,7 @@ def _find_field(
     fieldnames: list[str],
     candidates: tuple[str, ...],
 ) -> str | None:
-    """
-    Find the first matching column name.
-    """
+    # Find the first matching column name.
 
     lookup = _normalise_headers(fieldnames)
 
@@ -149,17 +144,15 @@ def _normalise_ground_truth(
 
 
 class DatasetParseError(Exception):
-    """Raised when a dataset file cannot be parsed."""
+    # Raised when a dataset file cannot be parsed.
+    pass
 
 
 def parse_csv_file(
     file_content: bytes,
     encoding: str = "utf-8",
 ) -> list[str]:
-    """
-    Parse an unlabelled CSV dataset and return
-    the detected text records.
-    """
+    # Parse an unlabelled CSV and return the detected text records.
 
     # Decode file
 
@@ -271,9 +264,7 @@ def parse_csv_file(
                 if not values:
                     continue
 
-                #
                 # Ignore mostly numeric columns
-                #
 
                 numeric_count = 0
 
@@ -290,9 +281,7 @@ def parse_csv_file(
                 if numeric_ratio > 0.8:
                     continue
 
-                #
                 # Calculate average text length
-                #
 
                 average_length = sum(len(value) for value in values) / len(values)
 
@@ -345,9 +334,7 @@ def parse_csv_file(
         return records
 
     except DatasetParseError:
-        # Important:
-        # don't convert our useful parsing errors
-        # into a generic "Could not parse CSV".
+        # Don't wrap useful parsing errors in a generic message.
         raise
 
     except csv.Error as exc:
@@ -361,12 +348,7 @@ def parse_labelled_csv_file(
     file_content: bytes,
     encoding: str = "utf-8",
 ) -> list[dict[str, str]]:
-    """
-    Parse a labelled CSV dataset.
-
-    The returned labels are normalised to SELF or NON_SELF.
-    This parser is suitable for both SELF_CORPUS and EVALUATION uploads.
-    """
+    # Parse a labelled CSV. Labels are normalised to SELF or NON_SELF.
 
     # Decode file
 
@@ -424,8 +406,7 @@ def parse_labelled_csv_file(
         if not raw_fieldnames:
             raise DatasetParseError("CSV file is empty or has no headers.")
 
-        # Remove empty headers such as:
-        # v1,v2,,,
+        # Remove empty headers such as v1,v2,,,
         fieldnames = [
             str(field).strip()
             for field in raw_fieldnames
@@ -511,30 +492,9 @@ def parse_json_file(
     file_content: bytes,
     encoding: str = "utf-8",
 ) -> list[str]:
-    """
-    Parse unlabelled JSON feedback.
-
-    Supported forms include:
-
-        [
-            "feedback one",
-            "feedback two"
-        ]
-
-    or:
-
-        [
-            {"text": "feedback one"}
-        ]
-
-    or:
-
-        {
-            "records": [
-                {"text": "feedback one"}
-            ]
-        }
-    """
+    # Parse unlabelled JSON feedback.
+    # Supports plain string arrays, object arrays with a text field,
+    # and wrapped objects like {"records": [...]}
 
     try:
 
@@ -647,22 +607,8 @@ def parse_labelled_json_file(
     file_content: bytes,
     encoding: str = "utf-8",
 ) -> list[dict[str, str]]:
-    """
-    Parse labelled JSON evaluation data.
-
-    Example:
-
-        [
-            {
-                "text": "registration was easy",
-                "label": "SELF"
-            },
-            {
-                "text": "free prize click here",
-                "label": "NON_SELF"
-            }
-        ]
-    """
+    # Parse labelled JSON evaluation data.
+    # Each item must have a text field and a label field.
 
     try:
 
@@ -783,15 +729,7 @@ def save_dataset_to_db(
     description: str | None = None,
     research_role: ResearchRole = "ANALYSIS",
 ) -> int:
-    """
-    Save an unlabelled dataset.
-
-    Typical roles:
-
-        SELF_CORPUS
-        ANALYSIS
-        SUPPORT
-    """
+    # Save an unlabelled dataset (SELF_CORPUS, ANALYSIS, or SUPPORT).
 
     role = _validate_research_role(research_role)
 
@@ -880,17 +818,8 @@ def save_labelled_dataset_to_db(
     description: str | None = None,
     research_role: ResearchRole = "EVALUATION",
 ) -> int:
-    """
-    Persist a labelled EVALUATION dataset.
-
-
-    Expected record format:
-
-        {
-            "text": "...",
-            "label": "SELF"
-        }
-    """
+    # Save a labelled dataset (SELF_CORPUS or EVALUATION).
+    # Expected record format: {"text": "...", "label": "SELF"}
 
     role = _validate_research_role(research_role)
 
@@ -914,9 +843,7 @@ def save_labelled_dataset_to_db(
         label = _normalise_ground_truth(record.get("label"))
 
         if label is None:
-            raise ValueError(
-                "Every labelled record must have a ground-truth label."
-            )
+            raise ValueError("Every labelled record must have a ground-truth label.")
 
         validated.append(
             {
@@ -995,11 +922,7 @@ def get_user_datasets(
     offset: int = 0,
     research_role: str | None = None,
 ) -> list[dict[str, Any]]:
-    """
-    Return datasets belonging to a user.
-
-    Optionally filter by research role.
-    """
+    # Return datasets belonging to a user. Optionally filter by research role.
 
     query = """
         SELECT
@@ -1135,14 +1058,8 @@ def get_dataset_feedback(
     limit: int = 100,
     offset: int = 0,
 ) -> list[dict[str, Any]]:
-    """
-    Return raw/preprocessed feedback and
-    ground-truth labels.
-
-    Predictions do NOT belong here.
-
-    They belong in experiment_results.
-    """
+    # Return raw/preprocessed feedback and ground-truth labels.
+    # Predictions belong in experiment_results, not here.
 
     with get_cursor() as cur:
 
@@ -1192,11 +1109,7 @@ def get_dataset_feedback(
 def get_all_dataset_feedback(
     dataset_id: int,
 ) -> list[dict[str, Any]]:
-    """
-    Retrieve the complete dataset without pagination.
-
-    Intended for experiment execution rather than UI browsing.
-    """
+    # Retrieve the full dataset without pagination. Used by experiment runs.
 
     with get_cursor() as cur:
 
@@ -1222,9 +1135,7 @@ def get_all_dataset_feedback(
 
 
 def get_self_corpus_dataset() -> dict | None:
-    """
-    Get the most recently loaded SELF corpus.
-    """
+    # Get the most recently loaded SELF corpus.
 
     with get_cursor() as cur:
 
@@ -1272,7 +1183,7 @@ def get_self_corpus_dataset() -> dict | None:
     labelled_count = int(counts["labelled_count"])
     self_count = int(counts["self_count"])
 
-    # If the dataset is fully unlabelled, every record is treated as SELF.
+    # If fully unlabelled, every record is treated as SELF.
     training_records = self_count if labelled_count > 0 else int(row["total_records"])
 
     return {
@@ -1285,12 +1196,7 @@ def get_self_corpus_dataset() -> dict | None:
 
 
 def load_self_corpus() -> list[str]:
-    """
-    Load raw text belonging to the latest SELF corpus.
-
-    This can replace the hard-coded
-    NORMAL_FEEDBACK_SAMPLES lookup in nsa.py.
-    """
+    # Load raw text from the latest SELF corpus dataset.
 
     with get_cursor() as cur:
 
@@ -1326,7 +1232,7 @@ def load_self_corpus() -> list[str]:
         labelled_count = int(cur.fetchone()["labelled_count"])
 
         if labelled_count > 0:
-            # Mixed dataset: only SELF-labelled records define the self-space.
+            # Mixed dataset: use only SELF-labelled rows.
             cur.execute(
                 """
                 SELECT raw_text
@@ -1365,23 +1271,8 @@ def load_self_corpus() -> list[str]:
 
 
 def load_self_corpus_by_id(dataset_id: int) -> list[str]:
-    """
-    Load raw text for a specific SELF_CORPUS dataset by its ID.
-
-    Unlike load_self_corpus() which always picks the most-recently-uploaded
-    SELF_CORPUS dataset, this function lets the caller choose exactly which
-    uploaded self corpus to use for training.
-
-    When the dataset contains labelled records (ground_truth_label is NOT NULL),
-    only records labelled SELF are returned so that NON_SELF entries in a
-    mixed corpus are never used to define the self-space.  When all records are
-    unlabelled (NULL) the full dataset is returned as-is, because the entire
-    corpus is assumed to represent normal/self behaviour.
-
-    Raises:
-        ValueError: if the dataset does not exist or is not a SELF_CORPUS.
-        RuntimeError: if the dataset has no usable SELF records.
-    """
+    # Load raw text for a specific SELF_CORPUS dataset.
+    # Returns only SELF-labelled rows when labels exist; otherwise returns all rows.
 
     with get_cursor() as cur:
 
@@ -1464,10 +1355,7 @@ def load_self_corpus_by_id(dataset_id: int) -> list[str]:
 def get_dataset_label_distribution(
     dataset_id: int,
 ) -> dict[str, int]:
-    """
-    Return ground-truth distribution for
-    a labelled evaluation dataset.
-    """
+    # Return ground-truth label counts for a labelled dataset.
 
     with get_cursor() as cur:
 
@@ -1515,17 +1403,8 @@ def delete_dataset(
     dataset_id: int,
     user_id: int,
 ) -> bool:
-    """
-    Delete a dataset owned by the user.
-
-    Note:
-    PostgreSQL may prevent deletion if completed
-    experiments still reference the dataset.
-
-    This is desirable for research integrity because
-    an experiment should not silently lose its source
-    dataset.
-    """
+    # Delete a dataset owned by the user.
+    # PostgreSQL will block deletion if completed experiments still reference it.
 
     with get_cursor(commit=True) as cur:
 

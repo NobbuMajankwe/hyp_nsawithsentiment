@@ -50,12 +50,7 @@ lemmatizer = WordNetLemmatizer()
 
 
 def load_normal_corpus_from_db() -> list[str]:
-    """
-    Legacy fallback corpus.
-
-    Once experiment_service.py is updated, the selected SELF_CORPUS will
-    normally be loaded there and passed directly to get_nsa().
-    """
+    # Fallback corpus. The selected SELF_CORPUS should be passed to get_nsa() directly.
     with get_cursor() as cur:
         cur.execute(
             """
@@ -108,10 +103,7 @@ def corpus_hash(corpus: list[str]) -> str:
 
 
 def load_stopwords_from_library() -> set[str]:
-    """Load the standard English stopword list from NLTK.
-
-    Stopwords are no longer read from STOP_WORDS_SAMPLES in the database.
-    """
+    # Load English stopwords from NLTK. No database query.
     try:
         return {word.lower() for word in nltk_stopwords.words("english")}
     except LookupError as exc:
@@ -122,7 +114,7 @@ def load_stopwords_from_library() -> set[str]:
 
 
 def load_stopwords_from_db() -> set[str]:
-    """Backward-compatible alias; no database query is performed."""
+    # Backward-compatible alias. No database query is performed.
     return load_stopwords_from_library()
 
 
@@ -164,22 +156,12 @@ def _tokenise_with_stopwords(text: str, stop_words: set[str]) -> list[str]:
 
 
 def tokenise(text: str) -> list[str]:
-    """
-    Public convenience tokenizer.
-
-    NSA instances cache their stop-word set so preprocessing does not query
-    the database for every comment.
-    """
+    # Public tokenizer. Uses cached stopwords to avoid repeated DB calls.
     return _tokenise_with_stopwords(text, load_stopwords_from_library())
 
 
 def detect_comment_language(text: str) -> tuple[str, float]:
-    """Detect the dominant language of a comment.
-
-    Only confident non-English detections are used for OOV classification.
-    Short or uncertain comments return UNKNOWN so they continue through the
-    normal Word2Vec/NSA path rather than being incorrectly rejected.
-    """
+    # Detect the dominant language. Returns UNKNOWN for short or uncertain text.
     if detect_langs is None:
         raise RuntimeError(
             "Language detection requires 'langdetect'. Install it with: "
@@ -192,8 +174,7 @@ def detect_comment_language(text: str) -> tuple[str, float]:
     candidate = re.sub(r"[^A-Za-zÀ-ÖØ-öø-ÿ' ]+", " ", candidate)
     candidate = re.sub(r"\s+", " ", candidate).strip()
 
-    # Language detectors are unreliable on very short text. Treat these as
-    # unknown and let the NSA make the decision instead.
+    # Detectors are unreliable on very short text. Treat as unknown.
     if len(candidate.split()) < 3 or len(candidate.replace(" ", "")) < 12:
         return "UNKNOWN", 0.0
 
@@ -233,10 +214,7 @@ def normalise_vector(vector: list[float]) -> list[float]:
 
 
 def stable_word_hash(word: str) -> int:
-    """
-    Stable hash used by Word2Vec so initial vectors are reproducible across
-    Python processes.
-    """
+    # Stable hash for Word2Vec so initial vectors are the same across runs.
     digest = hashlib.sha256(word.encode("utf-8")).digest()
     return int.from_bytes(digest[:8], byteorder="little", signed=False)
 
@@ -365,8 +343,7 @@ class NegativeSelectionAlgorithm:
         self.training_statistics: TrainingStatistics | None = None
         self.word2vec_model: Any | None = None
 
-        # Use the standard NLTK English stopword list. No stopwords are
-        # loaded from STOP_WORDS_SAMPLES or any other database table.
+        # Use the NLTK English stopword list. No DB table is used.
         self.stop_words: set[str] = load_stopwords_from_library()
         self._rnd = _rnd.Random(random_seed)
 
@@ -398,9 +375,8 @@ class NegativeSelectionAlgorithm:
         if not tokenised_corpus:
             raise RuntimeError("SELF corpus produced no usable tokens for Word2Vec.")
 
-        # workers=1 and a stable hash function improve reproducibility.
-        # Word2Vec is trained only on the selected SELF corpus so the held-out
-        # evaluation dataset does not leak into the text representation.
+        # workers=1 and stable hash improve reproducibility.
+        # Word2Vec trains on the SELF corpus only — no evaluation data leaks in.
         self.word2vec_model = Word2Vec(
             sentences=tokenised_corpus,
             vector_size=self.word2vec_vector_size,
@@ -514,13 +490,9 @@ class NegativeSelectionAlgorithm:
     # ------------------------------------------------------------------
 
     def _generate_candidate(self) -> list[float]:
-        """
-        Generate a dense detector candidate in the Word2Vec vector space.
-
-        A candidate starts near a randomly selected SELF vector and is moved
-        toward a random dense direction. Negative selection then rejects any
-        candidate that still falls inside the SELF region.
-        """
+        # Generate a dense detector candidate in the Word2Vec space.
+        # Start near a random SELF vector then shift toward a random direction.
+        # Negative selection rejects candidates that still land in the SELF region.
         if not self.self_vectors:
             raise RuntimeError("Cannot generate detectors before SELF vectors exist.")
 
@@ -576,7 +548,7 @@ class NegativeSelectionAlgorithm:
     # ------------------------------------------------------------------
 
     def _vocabulary_statistics(self, text: str) -> tuple[float, float]:
-        # The vocabulary is learned by Word2Vec from the selected SELF corpus.
+        # Vocabulary is learned from the SELF corpus by Word2Vec.
         tokens = self._tokenise(text)
 
         if not tokens:
@@ -605,8 +577,7 @@ class NegativeSelectionAlgorithm:
 
         detected_language, language_confidence = detect_comment_language(text)
 
-        # In this project OOV is reserved for confidently detected non-English
-        # comments. Uncertain/short comments continue through the NSA path.
+        # In this project OOV is reserved for confident non-English comments.
         if detected_language not in {"en", "UNKNOWN"} and language_confidence >= 0.80:
             return NSAResult(
                 id=record_id,
@@ -630,9 +601,7 @@ class NegativeSelectionAlgorithm:
 
         feature_vector = self._text_to_vector(text)
 
-        # An English/undetermined-language comment with no SELF vocabulary
-        # overlap is not OOV under the revised definition. It is maximally
-        # unfamiliar to the learned SELF corpus and is therefore NON_SELF.
+        # English/undetermined comment with no SELF vocabulary is NON_SELF.
         if all(abs(value) < 1e-12 for value in feature_vector):
             return NSAResult(
                 id=record_id,
@@ -757,13 +726,7 @@ def get_nsa(
     word2vec_min_count: int = WORD2VEC_DEFAULT_MIN_COUNT,
     word2vec_epochs: int = WORD2VEC_DEFAULT_EPOCHS,
 ) -> NegativeSelectionAlgorithm:
-    """
-    Return a trained NSA instance.
-
-    The selected SELF_CORPUS should normally be passed in through `corpus`.
-    The database fallback is temporary compatibility until experiment_service
-    is updated in the next step.
-    """
+    # Return a trained NSA instance. Pass corpus directly; DB fallback is temporary.
     normal_corpus = corpus if corpus is not None else load_normal_corpus_from_db()
 
     if not normal_corpus:

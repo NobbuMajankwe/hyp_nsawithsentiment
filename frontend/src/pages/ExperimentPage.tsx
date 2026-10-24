@@ -372,7 +372,7 @@ export default function ExperimentPage() {
                     ["Random seed",         parameters.randomSeed],
                   ]}
                 />
-                <ValuesCard
+                {/* <ValuesCard
                   title="Word2Vec parameters"
                   items={[
                     ["Vector size", parameters.word2vecVectorSize],
@@ -380,7 +380,7 @@ export default function ExperimentPage() {
                     ["Minimum word count", parameters.word2vecMinCount],
                     ["Training epochs", parameters.word2vecEpochs],
                   ]}
-                />
+                /> */}
                 <ValuesCard
                   title="Training and execution"
                   items={[
